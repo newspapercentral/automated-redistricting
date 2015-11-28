@@ -10,24 +10,32 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 
 public class District {
 	protected ArrayList<Unit> members;
+	protected ArrayList<Unit> actualMembers;
 	protected ArrayList<Unit> skippedUnits;
 	protected Geometry geometry;
 	protected int population;
 	protected ArrayList<Geometry> geomList;
+	protected ArrayList<Geometry> actualGeomList;
 	
 	public District(){
 		population = 0;
 		geometry = null;
 		members = new ArrayList<Unit>();
+		actualMembers = new ArrayList<Unit>();
 		skippedUnits = new ArrayList<Unit>();
 		geomList = new ArrayList<Geometry>();
+		actualGeomList = new ArrayList<Geometry>();
 	}
 	
 	public void add(Unit u){
 		members.add(u);
 		population += u.getPopulation();
 		addGeometryCollection(u.getGeometry());
-		//addGeometry(u.getGeometry());//merge population units
+		
+		if(u.getId().length() > 5){
+			this.actualMembers.add(u);
+			this.actualGeomList.add(u.getGeometry());
+		}
 	}
 	
 	public void remove(Unit u){
@@ -76,38 +84,28 @@ public class District {
 		}
 	}
 	
-//	private void addGeometry(Geometry geometry) {
-//		if(geometry == null){
-//			throw new NullPointerException();
-//		}else if(this.geometry == null){
-//			this.geometry = geometry;
-//		}else{
-//			this.geometry = this.geometry.union(geometry);
-//		}
-//	}
 
 	public ArrayList<Unit> getSkippedUnits(){
 		return this.skippedUnits;
 	}
 
-//	public void addContiguousUnit(Unit nextUnit){
-//		this.skippedUnits.add(nextUnit);
-//		ArrayList<Unit> removeFromSkippedUnits = new ArrayList<Unit>();
-//		for(Unit u: this.skippedUnits){
-//			Geometry nextUnitGeom = u.getGeometry();
-//			//If geom is empty, we don't have any units so add one
-//			if(this.geometry == null || 
-//					this.geometry.touches(nextUnitGeom) || this.geometry.within(nextUnitGeom)){
-//				add(u);
-//				removeFromSkippedUnits.add(u);
-//			}else{
-//				//System.out.println("BREAK Point");
-//			}
-//		}
-//		for(Unit u: removeFromSkippedUnits){
-//			if(this.skippedUnits.contains(u)){
-//				this.skippedUnits.remove(u);
-//			}
-//		}
-//	}
+	public Geometry getRealGeometry(){
+		Geometry result = null;
+		if(this.actualGeomList.size() > 0){
+			GeometryFactory factory = new GeometryFactory();
+	
+		     // note the following geometry collection may be invalid (say with overlapping polygons)
+		     GeometryCollection geometryCollection =
+		          (GeometryCollection) factory.buildGeometry( this.actualGeomList );
+	
+		     result = geometryCollection.union();
+		}else{
+			result = getGeometry();
+		}
+	     return result;
+	}
+	
+	public ArrayList<Unit> getActualMembers(){
+		return this.actualMembers;
+	}
 }

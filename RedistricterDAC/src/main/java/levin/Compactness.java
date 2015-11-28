@@ -31,7 +31,7 @@ public class Compactness {
 	
 	public Compactness(District d){
 		this.district = d;
-		Geometry districtGeom = d.getGeometry();
+		Geometry districtGeom = d.getRealGeometry();
 		this.area = districtGeom.getArea();
 		this.perimeter = districtGeom.getLength();
 		this.convexHull = districtGeom.convexHull();

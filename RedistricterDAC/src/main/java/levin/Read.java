@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import levin.printout.ErrorLog;
+import levin.printout.Logger;
 import levin.printout.Messenger;
 
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
@@ -18,6 +20,7 @@ import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
 import org.opengis.feature.simple.SimpleFeature;
 
+import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
 
@@ -51,12 +54,21 @@ public class Read {
 		ArrayList<Unit> rawUnits = read();
 		//Optimization: take this out and rely on post processing to fix this
 		//ArrayList<Unit> processedUnits = unitGroupProcessing(rawUnits);
-		System.out.println("Finished reading now making state wide district");
+		Logger.log("Finished reading now making state wide district");
 		
 		for(Unit u: rawUnits){
 			((StateWideDistrict)stateWideDistrictList.getDistrict(0)).add(u);
 		}
-		System.out.println("Returning state wide district");
+		Logger.log("Returning state wide district");
+		Geometry stateGeometry = stateWideDistrictList.getDistrict(0).getGeometry();
+		if(stateGeometry.getNumGeometries() > 1){
+			for(Unit u: stateWideDistrictList.getDistrict(0).getMembers()){
+				if(u.getId().equals("13")){
+					Logger.log("found 13 in memberList");
+				}
+			}
+			Logger.log("State is a multipolygon, hope you made changes\n" + stateWideDistrictList.getDistrict(0).getGeometry().toText());
+		}
 		return stateWideDistrictList;
 	}
 	
@@ -89,6 +101,7 @@ public class Read {
 		      SimpleFeature feature = (SimpleFeature) iterator.next();
 		      int population;
 		      String blockId;
+
 		      
 		      if(Main.IS_BLOCK){
 			      blockId = feature.getAttribute(CENSUS_BLOCK_ID_ATTR).toString();
@@ -98,12 +111,20 @@ public class Read {
 		    	  population = getTractPop(tractData, blockId);
 		      }
 		      
+
+		      
 		      Read.POPULATION += population;
 		      MultiPolygon multiPolygon = (MultiPolygon) feature.getDefaultGeometry();		      
 		      Point centroid = multiPolygon.getCentroid();
 		      Unit u = new Unit(blockId, centroid, population, multiPolygon);
 		      populationStat.addValue(population);
 		      unitList.add(u);
+		      
+		      if(blockId.length() <= 5){
+		    	  Logger.log("gotBlock" + blockId);
+		    	  Logger.log("With geom " + multiPolygon.toText());
+		      }
+		      
 		    }
 		  	
 		  	
