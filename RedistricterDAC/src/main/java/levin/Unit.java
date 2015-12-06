@@ -4,10 +4,10 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.Point;
 
 public class Unit{
-	private String id;
-	private int population;
-	private Point centroid;
-	private Geometry geom;
+	protected String id;
+	protected int population;
+	protected Point centroid;
+	protected Geometry geom;
 	
 
 	public Unit(String _id, Point cen, int pop, Geometry geometry){
@@ -44,6 +44,10 @@ public class Unit{
 	
 	public void setGeometry(Geometry geometry){
 		this.geom = geometry;
+	}
+	
+	public int getNumUnits(){
+		return this.id.split(",").length;
 	}
 
 	@Override

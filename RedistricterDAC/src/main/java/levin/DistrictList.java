@@ -40,12 +40,10 @@ public class DistrictList {
 		return districtList[index];
 	}
 	
-	public int getDeviation(){
-		int idealPopulation = getTotalPopulation()/k;
-		//TODO deviation formula here
+	public int getDeviation(int idealPop){
 		int largestDiff=0;
 		for(District d : this.districtList){
-			int diff = d.getDistrictPopulation() - idealPopulation;
+			int diff = d.getDistrictPopulation() - idealPop;
 			if(largestDiff<Math.abs(diff)){
 				largestDiff = Math.abs(diff);
 			}
@@ -54,7 +52,7 @@ public class DistrictList {
 	}
 	
 	public double getDeviationPercentage(int idealPop){	
-		return ((double)this.getDeviation()/(double)idealPop)*100;
+		return ((double)this.getDeviation(idealPop)/(double)idealPop)*100;
 	}
 	
 	private int getTotalPopulation(){

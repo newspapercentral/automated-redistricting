@@ -23,6 +23,7 @@ import org.opengis.feature.simple.SimpleFeature;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Polygon;
 
 public class Read {
 
@@ -37,6 +38,8 @@ public class Read {
 	private static final String CENSUS_BLOCK_ID_ATTR = "BLOCKID10";
 	private static final String CENSUS_TRACT_ID_ATTR = "GEOID10";
 	private static final String CENSUS_POP_ATTR = "POP10";
+	
+	private static int EDITED_UNITS;
 
 	
 	
@@ -46,6 +49,7 @@ public class Read {
 		POP_FILE = doc_root + dataFilePath + popFile;
 		UNIT_COUNTER = 0;
 		POPULATION = 0;	
+		EDITED_UNITS=0;
 		
 	}
 	
@@ -137,7 +141,8 @@ public class Read {
 		}
 		Messenger.log("Average Unit Population: " + populationStat.getMean());
 		Messenger.log("Stdev Unit Population: " + populationStat.getStandardDeviation());
-		return unitList;
+		return cleanUnits(unitList);
+		//return unitList;
 	}
 	
 
@@ -202,6 +207,93 @@ public class Read {
 			System.exit(0);
 		}
 		return population;
+	}
+	
+	private ArrayList<Unit> cleanUnits(ArrayList<Unit> units){
+		mergeMultiPolygonUnits(units);
+		mergeNestedUnits(units);
+		return units;
+	}
+	
+	private ArrayList<Unit> mergeNestedUnits(ArrayList<Unit> units){
+		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
+		ArrayList<Unit> addUnits = new ArrayList<Unit>();
+		for(Unit u: units){
+
+			boolean hasHoles = ((Polygon)u.getGeometry().union()).getNumInteriorRing() != 0;
+			if(hasHoles && u.getId().length() > 2){
+				EDITED_UNITS ++;
+				Logger.log("Editing: " + u.getId());
+				Logger.log("Edit Count: " + EDITED_UNITS);
+				removeUnits.add(u);//has holes so remove and replace with new unit with no holes
+				UnitGroup mergedUnits = new UnitGroup(u.getId(), u.getCentroid(), u.getPopulation(), u.getGeometry());
+				ArrayList<Unit> insideUnits = findInsideUnits(u, units);
+				removeUnits.addAll(insideUnits);//remove all inside units because it's replaced with new unit with no holes
+				for(Unit innerUnit: insideUnits){
+					mergedUnits.addUnit(innerUnit);
+				}
+				addUnits.add(mergedUnits);
+			}
+		}
+		
+		return updateUnitList(units, removeUnits, addUnits);
+	}
+	
+	private ArrayList<Unit> findInsideUnits(Unit big, ArrayList<Unit> units){
+		ArrayList<Unit> insideUnits = new ArrayList<Unit>();
+		for(Unit u: units){
+			if(!u.getId().equals(big.getId()) && u.getId().length() > 2  
+					&& u.getId().substring(0, 11).equals(big.getId().substring(0, 11))// the first parts of the id should be similar denoting that they are in the same general vicinity
+					&& big.getGeometry().within(u.getGeometry())){
+				insideUnits.add(u);
+			}
+		}
+		return insideUnits;
+	}
+	
+	private ArrayList<Unit> mergeMultiPolygonUnits(ArrayList<Unit> units){
+		ArrayList<Unit> addUnits = new ArrayList<Unit>();
+		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
+		for(Unit u: units){
+			if(u.getGeometry().getNumGeometries() > 1){
+				EDITED_UNITS ++;
+				Logger.log("Editing: " + u.getId());
+				Logger.log("Edit Count: " + EDITED_UNITS);
+				removeUnits.add(u);
+				UnitGroup mergedUnits = new UnitGroup(u.getId(), u.getCentroid(), u.getPopulation(), u.getGeometry());
+				for(Unit combineUnits: findInBetweenUnits(u, units)){
+					mergedUnits.addUnit(combineUnits);
+					removeUnits.add(combineUnits);
+				}
+				addUnits.add(mergedUnits);
+			}
+		}
+		return updateUnitList(units, removeUnits, addUnits);
+	}
+	
+	private ArrayList<Unit> findInBetweenUnits(Unit multi, ArrayList<Unit> units){
+		ArrayList<Unit> mergeUnits = new ArrayList<Unit>();
+		ArrayList<Unit> neighbors = new ArrayList<Unit>();
+		for(Unit u: units){
+			
+			if(!u.getId().equals(multi.getId())
+					&& multi.getGeometry().union(u.getGeometry()).getNumGeometries() == 1){
+				mergeUnits.add(u);
+				break;
+			}else if(!u.getId().equals(multi.getId())
+					&& multi.getGeometry().touches(u.getGeometry())){
+				neighbors.add(u);
+			}
+		}
+		return mergeUnits.size() >0 ? mergeUnits : neighbors;
+	}
+	
+	private ArrayList<Unit> updateUnitList(ArrayList<Unit> units, ArrayList<Unit> removeUnits, ArrayList<Unit> addUnits){
+		for(Unit u: removeUnits){
+			units.remove(u);
+		}
+		units.addAll(addUnits);
+		return units;
 	}
 
 }

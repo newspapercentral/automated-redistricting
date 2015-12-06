@@ -99,7 +99,7 @@ public class Main {
 		DistrictList finalDistricts = divideAndConquer(k, stateWideDistrict);
 		Messenger.log("-----------------FINAL DISTRICTS---------------------");
 		double devPercentage = finalDistricts.getDeviationPercentage(stateWideDistrict.getDistrictPopulation()/k);
-		Messenger.log("FINAL Deviation Percentage: " + finalDistricts.getDeviation() + " people = " + devPercentage + "%");
+		Messenger.log("FINAL Deviation Percentage: " + finalDistricts.getDeviation(stateWideDistrict.getDistrictPopulation()/k) + " people = " + devPercentage + "%");
 		Messenger.log(finalDistricts.toString());
 		CompactnessCalculator calculator = new CompactnessCalculator(finalDistricts, STATE);
 		Messenger.log(calculator.toString());
@@ -150,13 +150,15 @@ public class Main {
 			Logger.log("Calling redistrict");
 			DistrictList districts = redistrict(d, idealPop, searchPoint);
 			Logger.log("return from redistrict");
-			if(districts.getDeviation()<bestDeviation && 
+			Messenger.log("\tPop0:" + districts.getDistrict(0).getDistrictPopulation() +
+					"Pop1:" + districts.getDistrict(1).getDistrictPopulation());
+			if(Math.abs(districts.getDistrict(0).getDistrictPopulation() - idealPop) < bestDeviation && 
 					validateDistrictList(districts, idealPop, d.getMembers().size(), d.getDistrictPopulation()).hasSuccessCode()){
 				Logger.log("new best");
 				bestDistricts = districts;
-				bestDeviation = districts.getDeviation();
+				bestDeviation = Math.abs(districts.getDistrict(0).getDistrictPopulation() - idealPop);
 				bestIndex=index;
-			}else if(districts.getDeviation()==bestDeviation && 
+			}else if(districts.getDeviation(idealPop)==bestDeviation && 
 					validateDistrictList(districts, idealPop, d.getMembers().size(), d.getDistrictPopulation()).hasSuccessCode()){
 				//If two district sets have the same deviation, pick the one with the 
 				//smallest area + perimeter
@@ -167,7 +169,7 @@ public class Main {
 				proposedScore = districts.getAverageSimpleCompactnessScore();
 				if(proposedScore < bestScore){
 					bestDistricts = districts;
-					bestDeviation = districts.getDeviation();
+					bestDeviation = districts.getDeviation(idealPop);
 					bestIndex=index;
 				}
 				
@@ -179,7 +181,7 @@ public class Main {
 		Logger.log("-----------Best-------------" + bestIndex);
 		Logger.log(bestDistricts.getDistrict(1).getGeometry().toText());
 		Logger.log(bestDistricts.getDistrict(0).getGeometry().toText());
-		Logger.log(bestDistricts.getDistrict(0).getDistrictPopulation() + " \n"
+		Messenger.log("\tBest0:" + bestDistricts.getDistrict(0).getDistrictPopulation() + " \n\t Best1: "
 				+ bestDistricts.getDistrict(1).getDistrictPopulation());
 		Logger.log("DIFF: " + (bestDistricts.getDistrict(0).getDistrictPopulation() - bestDistricts.getDistrict(1).getDistrictPopulation()));
 		return bestDistricts;
@@ -224,12 +226,12 @@ public class Main {
 		Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
 		Logger.log(districts.getDistrict(0).getGeometry().toText());
 		Logger.log(districts.getDistrict(1).getGeometry().toText());
-		Logger.log("Deviation: " + districts.getDeviation());
+		Logger.log("Deviation: " + districts.getDeviation(idealPop));
 		if(SWAPS){
 			optimizePopulation(districts, idealPop);
 		}
 		double devPercentage = districts.getDeviationPercentage(idealPop);
-		Messenger.log("\tDeviation: " + districts.getDeviation() + " people = " + ((double)Math.round(devPercentage * 1000)/1000) + "%");
+		Messenger.log("\tDeviation: " + districts.getDeviation(idealPop) + " people = " + ((double)Math.round(devPercentage * 1000)/1000) + "%");
 		
 		Logger.log(String.valueOf(districts.getDistrict(1).getSkippedUnits().size()));
 		Logger.log(districts.getDistrict(1).getGeometry().toText());
