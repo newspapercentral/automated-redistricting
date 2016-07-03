@@ -8,13 +8,14 @@ public class Unit{
 	protected int population;
 	protected Point centroid;
 	protected Geometry geom;
-	
+	protected int districtAssignment;
 
 	public Unit(String _id, Point cen, int pop, Geometry geometry){
 		id = _id;
 		centroid = cen;
 		population = pop;
 		geom = geometry;
+		districtAssignment=-1;
 	}
 	
 	public String getId() {
@@ -48,6 +49,14 @@ public class Unit{
 	
 	public int getNumUnits(){
 		return this.id.split(",").length;
+	}
+	
+	public void setDistrictAssignment(int districtNum){
+		this.districtAssignment = districtNum;
+	}
+	
+	public int getDistrictAssignment(){
+		return this.districtAssignment;
 	}
 
 	@Override

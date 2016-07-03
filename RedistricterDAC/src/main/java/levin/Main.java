@@ -23,6 +23,8 @@ public class Main {
 	private static String STATE;
 	public static boolean IS_BLOCK;
 	private static boolean SWAPS;
+	private static boolean CONTIG = true;
+	private static String MAX_FUNCTION;
 	private static int k;
 	
 	public static String DOC_ROOT;
@@ -50,6 +52,10 @@ public class Main {
 			Logger.setDebugFlag(DEBUG);
 			IS_BLOCK = args[4].equals("block");
 			SWAPS = args[5].equals("true");
+			if(args.length > 7){
+				CONTIG = args[6].equals("true");
+				MAX_FUNCTION = args[7];
+			}
 			if(IS_BLOCK){
 				dataFilePath = "/tabblock2010_" + CompactnessCalculator.getFIPSString(STATE) + "_pophu/";
 				shapeFilePath = "tabblock2010_" + CompactnessCalculator.getFIPSString(STATE) + "_pophu.shp";
@@ -72,17 +78,16 @@ public class Main {
 			Logger.log("USSAGE: RedistricterDAC STATE #districts dataFilePath DEBUG [block/tract] SWAPS[true/false]");
 			Logger.log("Example: RedistricterDAC nh 2 /Users/Harry/Desktop/tabblock2010_33_pophu/tabblock2010_33_pophu.shp false block true");
 			Logger.log("Running with default values");
-			STATE = "nh";
+			STATE = "hi";
 			k = 2;
-			DOC_ROOT = "/Users/Harry/Desktop";
-			DEBUG = true;
+			DOC_ROOT = "/Users/Harry/Desktop/data";
+			DEBUG = false;
 			Logger.setDebugFlag(DEBUG);
-			IS_BLOCK=true;
+			IS_BLOCK=false;
 			SWAPS = true;
-
-			dataFilePath = "/tabblock2010_" + CompactnessCalculator.getFIPSString(STATE) + "_pophu/";
-			shapeFilePath = "tabblock2010_" + CompactnessCalculator.getFIPSString(STATE) + "_pophu.shp";
-			popFilePath = "";
+			dataFilePath = "/tl_2010_" + CompactnessCalculator.getFIPSString(STATE) + "_tract10/";
+			shapeFilePath = "tl_2010_15_tract10.shp";
+			popFilePath = "tract-pop.txt";
 			csvFilePath = STATE + "-csv.csv";
 			Messenger.log("STATE=" + STATE + ", k=" + k + " , DOC_ROOT=" + DOC_ROOT 
 					+ " , DEBUG=" + DEBUG
@@ -91,18 +96,21 @@ public class Main {
 			
 		}
 		if(!validateRequirements()){
-			ErrorLog.log("One or more expected data files does not exist");
+			//ErrorLog.log("One or more expected data files does not exist");
 		}
-		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath);
+		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK);
 		District stateWideDistrict = r.getDistrictList(STATE).getDistrict(0);
 		defaultSearchPoints = getDefaultSearchPoints(stateWideDistrict.getGeometry());
 		DistrictList finalDistricts = divideAndConquer(k, stateWideDistrict);
 		Messenger.log("-----------------FINAL DISTRICTS---------------------");
 		double devPercentage = finalDistricts.getDeviationPercentage(stateWideDistrict.getDistrictPopulation()/k);
-		Messenger.log("FINAL Deviation Percentage: " + finalDistricts.getDeviation(stateWideDistrict.getDistrictPopulation()/k) + " people = " + devPercentage + "%");
-		Messenger.log(finalDistricts.toString());
-		CompactnessCalculator calculator = new CompactnessCalculator(finalDistricts, STATE);
+		Messenger.log("FINAL Deviation Percentage:" + finalDistricts.getDeviation(stateWideDistrict.getDistrictPopulation()/k) + " people=" + devPercentage + "%");
+		Write.write(STATE + "-shapedata.csv", finalDistricts.toString());
+		CompactnessCalculator calculator = new CompactnessCalculator(DOC_ROOT, finalDistricts, STATE);
 		Messenger.log(calculator.toString());
+		String[] blockAssignmentData = printBlockAssignmentList(r.getRawUnits(), finalDistricts);
+		Write.write(blockAssignmentData[0], blockAssignmentData[1]);
+		Messenger.log("DONE :-)");
 	}
 	
 	private static DistrictList divideAndConquer(int numDistrictsLeft, District d){
@@ -112,16 +120,16 @@ public class Main {
 			return new  DistrictList(d);
 		}else if(numDistrictsLeft == 2){
 			//base case 2
-			return runWithSearchPoints(d, d.getDistrictPopulation()/2);
+			return runWithSearchPoints(d, d.getDistrictPopulation()/2, false);
 		}else if (numDistrictsLeft%2 != 0){
 			//recursion
-			DistrictList oddRecursionList = runWithSearchPoints(d, d.getDistrictPopulation()/numDistrictsLeft);
+			DistrictList oddRecursionList = runWithSearchPoints(d, d.getDistrictPopulation()/numDistrictsLeft, false);
 			DistrictList left = divideAndConquer(1, oddRecursionList.getDistrict(0));
 			DistrictList right = divideAndConquer(numDistrictsLeft-1, oddRecursionList.getDistrict(1) );
 			return merge(left.getDistrictList(), right.getDistrictList());
 		}else if (numDistrictsLeft%2 == 0){
 			//recursion
-			DistrictList evenRecursionList = runWithSearchPoints(d, d.getDistrictPopulation()/2);
+			DistrictList evenRecursionList = runWithSearchPoints(d, d.getDistrictPopulation()/2, false);
 			DistrictList left =  divideAndConquer(numDistrictsLeft/2, evenRecursionList.getDistrict(0));
 			DistrictList right = divideAndConquer(numDistrictsLeft/2, evenRecursionList.getDistrict(1) );
 			return merge(left.getDistrictList(), right.getDistrictList());
@@ -141,20 +149,19 @@ public class Main {
 
 	}
 	
-	private static DistrictList runWithSearchPoints(District d, int idealPop){
+	private static DistrictList runWithSearchPoints(District d, int idealPop, boolean maxOptimize){
 		int bestDeviation=Integer.MAX_VALUE;
 		DistrictList bestDistricts = null;
 		int index=0;
 		int bestIndex=0;
 		for(double[] searchPoint: defaultSearchPoints){
 			Logger.log("Calling redistrict");
-			DistrictList districts = redistrict(d, idealPop, searchPoint);
+			DistrictList districts = redistrict(d, idealPop, searchPoint, maxOptimize);
 			Logger.log("return from redistrict");
 			Messenger.log("\tPop0:" + districts.getDistrict(0).getDistrictPopulation() +
 					"Pop1:" + districts.getDistrict(1).getDistrictPopulation());
 			if(Math.abs(districts.getDistrict(0).getDistrictPopulation() - idealPop) < bestDeviation && 
 					validateDistrictList(districts, idealPop, d.getMembers().size(), d.getDistrictPopulation()).hasSuccessCode()){
-				Logger.log("new best");
 				bestDistricts = districts;
 				bestDeviation = Math.abs(districts.getDistrict(0).getDistrictPopulation() - idealPop);
 				bestIndex=index;
@@ -184,10 +191,22 @@ public class Main {
 		Messenger.log("\tBest0:" + bestDistricts.getDistrict(0).getDistrictPopulation() + " \n\t Best1: "
 				+ bestDistricts.getDistrict(1).getDistrictPopulation());
 		Logger.log("DIFF: " + (bestDistricts.getDistrict(0).getDistrictPopulation() - bestDistricts.getDistrict(1).getDistrictPopulation()));
+		
+		/*
+		 * For speed we will run a light version of the optimize in which we only
+		 * swap one level of adjacent units. If we can't get the optimal deviation
+		 * then we will run the full version of optimize, which can swap an infinite
+		 * number of units until the population levels are equal. 
+		 */
+		if(!maxOptimize && bestDistricts.getFirstDistrictDev(idealPop) > 1){
+			Messenger.log("********turning on maxOptimize");
+			bestDistricts = runWithSearchPoints(d, idealPop, true);
+		}
+		
 		return bestDistricts;
 	}
 	
-	private static DistrictList redistrict(District district, int idealPop, double[] searchPoint){
+	private static DistrictList redistrict(District district, int idealPop, double[] searchPoint, boolean optimizeMax){
 		DistrictList districts = new DistrictList(2);		
 		
 		KdTree<Unit> kd = makeKdTree(district.getMembers());
@@ -215,20 +234,36 @@ public class Main {
 		//Assign anything left over that we missed
 		districts.assignSkippedDistricts();
 		//Fix non-contiguity if we can
-		Logger.log("MultiPolygonFlatener process starting");
-		MultiPolygonFlatener mpf = new MultiPolygonFlatener(districts);
-		Logger.log("made changes: " + mpf.hasChanged());
-		if(mpf.hasChanged()){
-			districts = mpf.getNewDistrictList();
+		if(CONTIG){
+			Logger.log("MultiPolygonFlatener process starting");
+			MultiPolygonFlatener mpf = new MultiPolygonFlatener(districts);
+			Logger.log("made changes: " + mpf.hasChanged());
+			if(mpf.hasChanged()){
+				districts = mpf.getNewDistrictList();
+			}
+			Logger.log("Flattener Test: " );
+			Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
+			Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
+			Logger.log(districts.getDistrict(0).getGeometry().toText());
+			Logger.log(districts.getDistrict(1).getGeometry().toText());
+			Logger.log("Deviation: " + districts.getDeviation(idealPop));
 		}
-		Logger.log("Flattener Test: " );
-		Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
-		Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
-		Logger.log(districts.getDistrict(0).getGeometry().toText());
-		Logger.log(districts.getDistrict(1).getGeometry().toText());
-		Logger.log("Deviation: " + districts.getDeviation(idealPop));
 		if(SWAPS){
-			optimizePopulation(districts, idealPop);
+			int lastDeviation = Integer.MAX_VALUE;
+			Logger.log("starting optimize loop");
+			while(districts.getFirstDistrictDev(idealPop) > 1 && districts.getFirstDistrictDev(idealPop) < lastDeviation){
+				Logger.log(districts.getFirstDistrictDev(idealPop) +  "> 1 && " +  "<" + lastDeviation);
+				lastDeviation = districts.getFirstDistrictDev(idealPop);
+				optimizePopulation(districts, idealPop);
+				
+				/*
+				 * Only run optimize once unless we set flag for maxOptimize
+				 */
+				if(!optimizeMax){
+					break;
+				}
+			}
+			Logger.log("end optimize loop");
 		}
 		double devPercentage = districts.getDeviationPercentage(idealPop);
 		Messenger.log("\tDeviation: " + districts.getDeviation(idealPop) + " people = " + ((double)Math.round(devPercentage * 1000)/1000) + "%");
@@ -371,5 +406,33 @@ public class Main {
 		Logger.log(blockShapeFile.getAbsolutePath() + " " + blockShapeFile.exists());
 		
 		return (stateShapeFile.exists() && actualDistrictsShapeFile.exists() && blockShapeFile.exists());
+	}
+	
+	private static String[] printBlockAssignmentList(ArrayList<Unit> rawUnits, DistrictList districts){
+		String fileName="BlockAssign_ST_" + CompactnessCalculator.getFIPSString(STATE) + "_" + STATE + "_CD.txt";
+		String assignments = "";
+		int index=1;//start at 1
+		for(District d : districts.getDistrictList()){
+			for(Unit u: rawUnits){
+				if(u.getDistrictAssignment() == -1 &&
+						d.containsId(u.getId())){
+					u.setDistrictAssignment(index);
+				}
+			}
+			index++;
+		}
+		
+		for(Unit u: rawUnits){
+			//Pieces we've merged have to be separated again
+			if(u.getId().contains(",")){
+				for(String piece: u.getId().split(",")){
+					assignments += piece + "," + u.getDistrictAssignment() + "\n";
+				}
+			}else{
+				assignments += u.getId() + "," + u.getDistrictAssignment() + "\n";
+			}
+		}
+		
+		return new String[] {fileName, assignments};
 	}
 }

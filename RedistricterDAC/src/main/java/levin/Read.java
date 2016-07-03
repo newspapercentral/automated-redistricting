@@ -8,17 +8,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-import levin.printout.ErrorLog;
 import levin.printout.Logger;
 import levin.printout.Messenger;
 
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
+import org.geotools.data.DefaultTransaction;
 import org.geotools.data.FeatureSource;
+import org.geotools.data.FeatureWriter;
+import org.geotools.data.Transaction;
+import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
+import org.geotools.referencing.CRS;
 import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.operation.MathTransform;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
@@ -38,46 +45,61 @@ public class Read {
 	private static final String CENSUS_BLOCK_ID_ATTR = "BLOCKID10";
 	private static final String CENSUS_TRACT_ID_ATTR = "GEOID10";
 	private static final String CENSUS_POP_ATTR = "POP10";
+	private static ArrayList<Unit> RAW_UNITS;
+	private static boolean IS_BLOCK;
 	
 	private static int EDITED_UNITS;
 
 	
 	
-	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile){
+	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock){
 		DOC_ROOT = doc_root;
 		SHAPE_FILE = doc_root + dataFilePath + shapeFile;
 		POP_FILE = doc_root + dataFilePath + popFile;
 		UNIT_COUNTER = 0;
 		POPULATION = 0;	
 		EDITED_UNITS=0;
+		RAW_UNITS = new ArrayList<Unit>();
+		IS_BLOCK = isBlock;
 		
 	}
 	
 	public DistrictList getDistrictList(String stateId){
 		DistrictList stateWideDistrictList = new DistrictList(1, stateId, DOC_ROOT);
-		ArrayList<Unit> rawUnits = read();
+		RAW_UNITS = read();
 		//Optimization: take this out and rely on post processing to fix this
 		//ArrayList<Unit> processedUnits = unitGroupProcessing(rawUnits);
 		Logger.log("Finished reading now making state wide district");
 		
-		for(Unit u: rawUnits){
+		for(Unit u: RAW_UNITS){
 			((StateWideDistrict)stateWideDistrictList.getDistrict(0)).add(u);
 		}
 		Logger.log("Returning state wide district");
 		Geometry stateGeometry = stateWideDistrictList.getDistrict(0).getGeometry();
 		if(stateGeometry.getNumGeometries() > 1){
-			for(Unit u: stateWideDistrictList.getDistrict(0).getMembers()){
-				if(u.getId().equals("13")){
-					Logger.log("found 13 in memberList");
-				}
-			}
+//			for(Unit u: stateWideDistrictList.getDistrict(0).getMembers()){
+//				if(u.getId().equals("13")){
+//					Logger.log("found 13 in memberList");
+//				}
+//			}
 			Logger.log("State is a multipolygon, hope you made changes\n" + stateWideDistrictList.getDistrict(0).getGeometry().toText());
 		}
 		return stateWideDistrictList;
 	}
 	
-	private ArrayList<Unit> read() {
-	    ArrayList<Unit> unitList = new ArrayList<Unit>();
+	public ArrayList<Unit> readRawDataList(ArrayList<String> shapeFiles){
+		ArrayList<Unit> allUnits = new ArrayList<Unit>();
+		for(String file: shapeFiles){
+			SHAPE_FILE=file;
+			ArrayList<Unit> newUnits = readRawData();
+			allUnits.addAll(newUnits);
+		}
+		return allUnits;
+	}
+	
+	public ArrayList<Unit> readRawData(){
+		ArrayList<Unit> unitList = new ArrayList<Unit>();
+	    ArrayList<String> uniqueCounties = new ArrayList<String>();
 	    SummaryStatistics populationStat = new SummaryStatistics();
 		try {	   	  
 		  //Read in census block shapefile
@@ -97,7 +119,7 @@ public class Read {
 	      
 	      //Load population data for tracts
 	      HashMap<String, Integer> tractData = null;
-	      if(!Main.IS_BLOCK){
+	      if(!IS_BLOCK){
 	    	  tractData = getPopData();
 	      }
 	      
@@ -107,7 +129,7 @@ public class Read {
 		      String blockId;
 
 		      
-		      if(Main.IS_BLOCK){
+		      if(IS_BLOCK){
 			      blockId = feature.getAttribute(CENSUS_BLOCK_ID_ATTR).toString();
 			      population = Integer.parseInt(feature.getAttribute(CENSUS_POP_ATTR).toString());
 		      }else{
@@ -124,12 +146,13 @@ public class Read {
 		      populationStat.addValue(population);
 		      unitList.add(u);
 		      
-		      if(blockId.length() <= 5){
-		    	  Logger.log("gotBlock" + blockId);
-		    	  Logger.log("With geom " + multiPolygon.toText());
+		      if(blockId.length() >=5){
+		    	  String county = u.getId().substring(2, 5);
+	    				if(!uniqueCounties.contains(county)){
+	    					uniqueCounties.add(county);
+	    				}
 		      }
-		      
-		    }
+		  }
 		  	
 		  	
 		    iterator.close();
@@ -139,9 +162,16 @@ public class Read {
 			e.printStackTrace();
 			System.exit(0);
 		}
-		Messenger.log("Average Unit Population: " + populationStat.getMean());
-		Messenger.log("Stdev Unit Population: " + populationStat.getStandardDeviation());
-		return cleanUnits(unitList);
+		Messenger.log("Average Unit Population=" + populationStat.getMean());
+		Messenger.log("Stdev Unit Population=" + populationStat.getStandardDeviation());
+		Messenger.log("Max Unit=" + populationStat.getMax());
+		Messenger.log("Min Unit=" + populationStat.getMin());
+		Messenger.log("NumCounties=" + uniqueCounties.size());
+		return unitList;
+	}
+	
+	private ArrayList<Unit> read() {
+		return cleanUnits(readRawData());
 		//return unitList;
 	}
 	
@@ -210,8 +240,25 @@ public class Read {
 	}
 	
 	private ArrayList<Unit> cleanUnits(ArrayList<Unit> units){
-		mergeMultiPolygonUnits(units);
+		int previousEditCount = -1;
+		Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
+		while(previousEditCount < EDITED_UNITS){
+			Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
+			previousEditCount = EDITED_UNITS;
+			mergeMultiPolygonUnits(units);
+		}
 		mergeNestedUnits(units);
+		
+		SummaryStatistics populationStat = new SummaryStatistics();
+		for(Unit u: units){
+			populationStat.addValue(u.getPopulation());
+		}
+		
+		Messenger.log("CLEANEDAverage Unit Population=" + populationStat .getMean());
+		Messenger.log("CLEANEDStdev Unit Population=" + populationStat.getStandardDeviation());
+		Messenger.log("CLEANEDMax Unit=" + populationStat.getMax());
+		Messenger.log("CLEANEDMin Unit=" + populationStat.getMin());
+		
 		return units;
 	}
 	
@@ -219,7 +266,7 @@ public class Read {
 		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
 		ArrayList<Unit> addUnits = new ArrayList<Unit>();
 		for(Unit u: units){
-
+			Logger.log("Polygon Cast:" + u.getId());
 			boolean hasHoles = ((Polygon)u.getGeometry().union()).getNumInteriorRing() != 0;
 			if(hasHoles && u.getId().length() > 2){
 				EDITED_UNITS ++;
@@ -294,6 +341,10 @@ public class Read {
 		}
 		units.addAll(addUnits);
 		return units;
+	}
+	
+	public ArrayList<Unit> getRawUnits(){
+		return this.RAW_UNITS;
 	}
 
 }

@@ -54,6 +54,17 @@ public class District {
 	public boolean contains(Unit u){
 		return members.contains(u);
 	}
+
+	public boolean containsId(String id){
+		boolean result = false;
+		for(Unit u: this.members){
+			if(u.id.equals(id)){
+				result = true;
+				break;
+			}
+		}
+		return result;
+	}
 	
 	public int getDistrictPopulation(){
 		return population;
@@ -107,5 +118,16 @@ public class District {
 	
 	public ArrayList<Unit> getActualMembers(){
 		return this.actualMembers;
+	}
+	
+	public int getNumCounties(){
+		ArrayList<String> uniqueCounties = new ArrayList<String>();
+		for(Unit u: this.actualMembers){
+			String county = u.getId().substring(2, 5);
+			if(!uniqueCounties.contains(county)){
+				uniqueCounties.add(county);
+			}
+		}
+		return uniqueCounties.size();
 	}
 }

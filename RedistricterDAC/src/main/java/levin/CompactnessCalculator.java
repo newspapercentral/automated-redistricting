@@ -19,7 +19,7 @@ import com.vividsolutions.jts.geom.Point;
 
 public class CompactnessCalculator {
 
-	private static final String dataFilePath = Main.DOC_ROOT + "/2012Congress/2012Congress.shp";
+	private static String dataFilePath = "";
 	private static final String FIPS_ATTR = "STATEFP";
 	private DistrictList district;
 	private int FIPS;
@@ -33,7 +33,8 @@ public class CompactnessCalculator {
 	private SummaryStatistics statCongPolsbyPopper = new SummaryStatistics();
 	private SummaryStatistics statCongModifiedSchwartzberg = new SummaryStatistics();
 	
-	public CompactnessCalculator(DistrictList districts, String stateId){
+	public CompactnessCalculator(String docroot, DistrictList districts, String stateId){
+		dataFilePath = docroot + "/2012Congress/2012Congress.shp";
 		this.district = districts;
 		this.FIPS = getFIPS(stateId);
 		statOurConvexHull = new SummaryStatistics();
@@ -231,17 +232,17 @@ public class CompactnessCalculator {
 		String result="";
 		result +="-------------------Compactness-------------------\n";
 		result +="------Ours-------------------------Existing------\n";
-		result +=this.statOurConvexHull.getMean() + "----vs----" + this.statCongConvexHull.getMean() + "\n";
-		result +=this.statOurConvexHull.getStandardDeviation() + "----vs----" + this.statCongConvexHull.getStandardDeviation() + "\n\n";
+		result +="ConvexHullOursMean=" + this.statOurConvexHull.getMean() + "<>" + this.statCongConvexHull.getMean() + "\n";
+		result +="ConvexHullOursSdev=" + this.statOurConvexHull.getStandardDeviation() + "<>" + this.statCongConvexHull.getStandardDeviation() + "\n\n";
 		
 //		result +=this.statOurReock.getMean() + "----vs----" + this.statCongReock.getMean() + "\n";
 //		result +=this.statOurReock.getStandardDeviation() + "----vs----" + this.statCongReock.getStandardDeviation() + "\n\n";
 
-		result +=this.statOurPolsbyPopper.getMean() + "----vs----" + this.statCongPolsbyPopper.getMean() + "\n";
-		result +=this.statOurPolsbyPopper.getStandardDeviation() + "----vs----" + this.statCongPolsbyPopper.getStandardDeviation() + "\n\n";
+		result +="PolsbyPopperOursMean=" + this.statOurPolsbyPopper.getMean() + "<>" + this.statCongPolsbyPopper.getMean() + "\n";
+		result +="PolsbyPopperOursSdev=" + this.statOurPolsbyPopper.getStandardDeviation() + "<>" + this.statCongPolsbyPopper.getStandardDeviation() + "\n\n";
 
-		result +=this.statOurModifiedSchwartzberg.getMean() + "----vs----" + this.statCongModifiedSchwartzberg.getMean() + "\n";
-		result +=this.statOurModifiedSchwartzberg.getStandardDeviation() + "----vs----" + this.statCongModifiedSchwartzberg.getStandardDeviation() + "\n\n";
+		result +="ModifiedSchwartzbergOursMean=" + this.statOurModifiedSchwartzberg.getMean() + "<>" + this.statCongModifiedSchwartzberg.getMean() + "\n";
+		result +="ModifiedSchwartzbergOursSdev=" + this.statOurModifiedSchwartzberg.getStandardDeviation() + "<>" + this.statCongModifiedSchwartzberg.getStandardDeviation() + "\n\n";
 
 		return result;
 

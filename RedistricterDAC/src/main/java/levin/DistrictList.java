@@ -2,6 +2,8 @@ package levin;
 
 import java.util.ArrayList;
 
+import levin.printout.Logger;
+
 public class DistrictList {
 	private int k;
 	private District[] districtList;
@@ -63,6 +65,11 @@ public class DistrictList {
 		return result;
 	}
 	
+	public int getFirstDistrictDev(int idealPop){
+		return Math.abs(districtList[0].getDistrictPopulation() - idealPop);
+
+	}
+	
 	public String csvOutput(){
 		String output = "";
 		for(int i=0; i<districtList.length; i++){
@@ -107,24 +114,27 @@ public class DistrictList {
 	public void swap(Unit u, boolean validate){
 		if(this.districtList.length ==2){
 			if(districtList[0].contains(u)){
+				Logger.log("d0");
+				Logger.log("Swapping: " + u.getId());
+				Logger.log(districtList[0].getGeometry().toText());
+				Logger.log("Unit geometry");
+				Logger.log(u.getGeometry().toText());
 				districtList[0].remove(u);
 				districtList[1].add(u);
+				Logger.log("Swapped " + u.getId());
 				if(Main.DEBUG && (districtList[0].getGeometry().toText().contains("MULTIPOLYGON") ||
 						districtList[1].getGeometry().toText().contains("MULTIPOLYGON"))){
 					System.out.println("Swapped " + u.getId() + " and made districts non-contig");
 				}
-//			result = false;
-//		})	
-//				if(validate && (!validateSwap(districtList[1]) || !validateSwap(districtList[0]))){
-//					unswap(u, 1 , 0);
-//				}
 			}else if(districtList[1].contains(u)){
+				Logger.log("d1");
+				Logger.log("Swapping " + u.getId());
+				Logger.log(districtList[1].getGeometry().toText());
+				Logger.log("Unit geometry");
+				Logger.log(u.getGeometry().toText());
 				districtList[1].remove(u);
 				districtList[0].add(u);
-				
-//				if(validate && (!validateSwap(districtList[1]) || !validateSwap(districtList[0]))){
-//					unswap(u, 0 , 1);
-//				}
+				Logger.log("Swapped " + u.getId());
 			}else{
 				System.err.println("Error: swapping district that is unassigned");
 				System.exit(0);
@@ -170,11 +180,16 @@ public class DistrictList {
 	
 	@Override
 	public String toString(){
-		String result = "";
+		String result = "District Index;Population;Number of Counties;Geometry";
 		int index=1;
+		
 		for(District d: this.districtList){
-			result+= "\nDistrict " + index + " " + d.getDistrictPopulation();
-			result+= "\n " + d.getGeometry();
+			//result+= "\nFINALDistrict:" + index + " " + d.getDistrictPopulation() + "pop," + d.getNumCounties() + " counties";
+			result += "\n";
+			result+= index + ";" + 
+					d.getDistrictPopulation() + ";"  +
+					d.getNumCounties() + ";" +
+					d.getGeometry();
 			index ++;
 		}
 		return result;

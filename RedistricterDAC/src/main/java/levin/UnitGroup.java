@@ -1,6 +1,7 @@
 package levin;
 
 import levin.printout.ErrorLog;
+import levin.printout.Logger;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.Point;
@@ -16,7 +17,7 @@ public class UnitGroup extends Unit{
 	
 	public void addUnit(Unit u){
 		if(u.getId().length() < 5){
-			ErrorLog.log("trying to add bad unit " + u.getId() + "to UnitGroup");
+			Logger.log("trying to add bad unit " + u.getId() + "to UnitGroup");
 		}
 		super.id += "," + u.getId();
 		super.population += u.getPopulation();
