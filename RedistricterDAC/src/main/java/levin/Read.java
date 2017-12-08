@@ -41,6 +41,7 @@ public class Read {
 	private static int POPULATION;
 	private int UNIT_COUNTER;
 	private static String DOC_ROOT;
+	protected static String DATA_PATH;
 	
 	private static final String CENSUS_BLOCK_ID_ATTR = "BLOCKID10";
 	private static final String CENSUS_TRACT_ID_ATTR = "GEOID10";
@@ -54,6 +55,7 @@ public class Read {
 	
 	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock){
 		DOC_ROOT = doc_root;
+		DATA_PATH = doc_root + dataFilePath;
 		SHAPE_FILE = doc_root + dataFilePath + shapeFile;
 		POP_FILE = doc_root + dataFilePath + popFile;
 		UNIT_COUNTER = 0;
@@ -259,6 +261,8 @@ public class Read {
 		Messenger.log("CLEANEDMax Unit=" + populationStat.getMax());
 		Messenger.log("CLEANEDMin Unit=" + populationStat.getMin());
 		
+		findNeighbors(units);
+		
 		return units;
 	}
 	
@@ -345,6 +349,23 @@ public class Read {
 	
 	public ArrayList<Unit> getRawUnits(){
 		return this.RAW_UNITS;
+	}
+	
+	private void findNeighbors(ArrayList<Unit>units) {
+		System.out.println("Starting neighbor calculation - FYI O(n^2)");
+		int len = units.size();
+		for(Unit u1: units) {
+			Geometry g1 = u1.getGeometry();
+			for(Unit u2: units) {
+				if(u1.getId() != u2.getId()) {
+					Geometry g2 = u2.getGeometry();
+					String inter = g1.intersection(g2).toText();
+					if(!inter.contains("EMPTY") && !inter.contains("POINT")) {
+						u1.addNeighbor(u2.getId());
+					}
+				}
+			}
+		}
 	}
 
 }

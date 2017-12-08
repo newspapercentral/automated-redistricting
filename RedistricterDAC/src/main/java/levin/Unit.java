@@ -1,7 +1,11 @@
 package levin;
 
+import java.util.ArrayList;
+
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Polygon;
 
 public class Unit{
 	protected String id;
@@ -9,6 +13,7 @@ public class Unit{
 	protected Point centroid;
 	protected Geometry geom;
 	protected int districtAssignment;
+	private ArrayList<String> neighbors;
 
 	public Unit(String _id, Point cen, int pop, Geometry geometry){
 		id = _id;
@@ -16,6 +21,7 @@ public class Unit{
 		population = pop;
 		geom = geometry;
 		districtAssignment=-1;
+		neighbors = new ArrayList<String>();
 	}
 	
 	public String getId() {
@@ -58,10 +64,28 @@ public class Unit{
 	public int getDistrictAssignment(){
 		return this.districtAssignment;
 	}
+	
+	public ArrayList<String> getNeighbors(){
+		return this.neighbors;
+	}
+	
+	public void addNeighbor(String s){
+		this.neighbors.add(s);
+	}
+	
+	private String neighborsToString() {
+		String result = "";
+		for(String s: this.neighbors) {
+			result += s + ";";
+		}
+		return result;
+	}
 
 	@Override
 	public String toString(){
-		return "[id:" + id + ", population:" + population + ", centroid" + centroid.toString() + "]";
+		//"|" is the delimiter because commas are used in coordinates
+		return id + "|" + population + "|" + centroid.toString() + "|" + 
+				neighborsToString() + "|" + getGeometry().toText();
 	}
 	
 	

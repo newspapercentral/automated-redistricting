@@ -105,11 +105,13 @@ public class Main {
 		Messenger.log("-----------------FINAL DISTRICTS---------------------");
 		double devPercentage = finalDistricts.getDeviationPercentage(stateWideDistrict.getDistrictPopulation()/k);
 		Messenger.log("FINAL Deviation Percentage:" + finalDistricts.getDeviation(stateWideDistrict.getDistrictPopulation()/k) + " people=" + devPercentage + "%");
-		Write.write(STATE + "-shapedata.csv", finalDistricts.toString());
+		//TODO
+		//Write.write(STATE + "-shapedata.csv", finalDistricts.toString());
 		CompactnessCalculator calculator = new CompactnessCalculator(DOC_ROOT, finalDistricts, STATE);
 		Messenger.log(calculator.toString());
 		String[] blockAssignmentData = printBlockAssignmentList(r.getRawUnits(), finalDistricts);
-		Write.write(blockAssignmentData[0], blockAssignmentData[1]);
+		//TODO
+		//Write.write(blockAssignmentData[0], blockAssignmentData[1]);
 		Messenger.log("DONE :-)");
 	}
 	
