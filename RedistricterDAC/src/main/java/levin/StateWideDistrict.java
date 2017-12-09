@@ -55,6 +55,7 @@ public class StateWideDistrict extends District {
 			  FeatureCollection collection = featureSource.getFeatures();
 			  FeatureIterator iterator = collection.features();
 			  System.out.println("Collection Size:" + collection.size());
+			  //Note:Should only have one feature (i.e. the state-wide geometry)
 			  if (iterator.hasNext()) {
 			      SimpleFeature feature = (SimpleFeature) iterator.next();
 			      MultiPolygon multiPolygon = (MultiPolygon) feature.getDefaultGeometry();

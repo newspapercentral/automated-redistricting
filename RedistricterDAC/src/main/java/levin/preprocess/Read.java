@@ -1,58 +1,76 @@
-package levin;
+package levin.preprocess;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import levin.DistrictList;
+import levin.StateWideDistrict;
+import levin.Unit;
+import levin.UnitGroup;
 import levin.printout.Logger;
 import levin.printout.Messenger;
 
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
-import org.geotools.data.DefaultTransaction;
 import org.geotools.data.FeatureSource;
-import org.geotools.data.FeatureWriter;
-import org.geotools.data.Transaction;
-import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
-import org.geotools.referencing.CRS;
 import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
-import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.opengis.referencing.operation.MathTransform;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
-import com.vividsolutions.jts.geom.Polygon;
 
+/** 
+ * Read and process shape files for tracts and blocks
+ * @author Harry
+ *
+ */
 public class Read {
 
 	private static String SHAPE_FILE;
 	private static String POP_FILE;
 	
-	//private static ArrayList<Unit> units;
 	private static int POPULATION;
 	private int UNIT_COUNTER;
 	private static String DOC_ROOT;
 	protected static String DATA_PATH;
 	
+	/**
+	 * Census attribute name for census block IDs
+	 */
 	private static final String CENSUS_BLOCK_ID_ATTR = "BLOCKID10";
+	/**
+	 * Census attribute name for census tract IDs
+	 */
 	private static final String CENSUS_TRACT_ID_ATTR = "GEOID10";
+	/**
+	 * Census attribute name for census block population
+	 * Note: census tract population is stored in a separate file
+	 */
 	private static final String CENSUS_POP_ATTR = "POP10";
-	private static ArrayList<Unit> RAW_UNITS;
+	private static ArrayList<Unit> UNITS;
 	private static boolean IS_BLOCK;
 	
 	private static int EDITED_UNITS;
 
 	
-	
+	/**
+	 * Configures reader path and census unit type
+	 * @param doc_root (file path) - root directory of input files and output (ex: "/Users/Harry/Desktop/Archive/data")
+	 * @param dataFilePath (file path) - directory of shape and data files (ex; "/TEST_TRACT/")
+	 * @param shapeFile (file name) - name of shape file (ex: "TEST.shp")
+	 * @param popFile (file name) - name of census tract data file
+	 * @param isBlock ("true"|"false") - true if the data is census blocks; false for census tracts
+	 * O(1)
+	 */
 	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock){
 		DOC_ROOT = doc_root;
 		DATA_PATH = doc_root + dataFilePath;
@@ -61,34 +79,41 @@ public class Read {
 		UNIT_COUNTER = 0;
 		POPULATION = 0;	
 		EDITED_UNITS=0;
-		RAW_UNITS = new ArrayList<Unit>();
+		UNITS = new ArrayList<Unit>();
 		IS_BLOCK = isBlock;
 		
 	}
 	
+	/**
+	 * 
+	 * @param stateId (ex: "hi")
+	 * @return
+	 * O(n) - stateWideDistrictList is O(1) because it sets integer/string values and reads in one 
+	 * state wide geometry feature
+	 * O(n^2) in worst case - practically O(n) see notes below
+	 */
 	public DistrictList getDistrictList(String stateId){
 		DistrictList stateWideDistrictList = new DistrictList(1, stateId, DOC_ROOT);
-		RAW_UNITS = read();
-		//Optimization: take this out and rely on post processing to fix this
-		//ArrayList<Unit> processedUnits = unitGroupProcessing(rawUnits);
+		UNITS = cleanUnits(readRawData());
 		Logger.log("Finished reading now making state wide district");
 		
-		for(Unit u: RAW_UNITS){
+		for(Unit u: UNITS){
 			((StateWideDistrict)stateWideDistrictList.getDistrict(0)).add(u);
 		}
 		Logger.log("Returning state wide district");
 		Geometry stateGeometry = stateWideDistrictList.getDistrict(0).getGeometry();
 		if(stateGeometry.getNumGeometries() > 1){
-//			for(Unit u: stateWideDistrictList.getDistrict(0).getMembers()){
-//				if(u.getId().equals("13")){
-//					Logger.log("found 13 in memberList");
-//				}
-//			}
+			//Ex: Hawaii is not contiguous and requires modifications to the shape file
 			Logger.log("State is a multipolygon, hope you made changes\n" + stateWideDistrictList.getDistrict(0).getGeometry().toText());
 		}
 		return stateWideDistrictList;
 	}
 	
+	/**
+	 * 
+	 * @param shapeFiles
+	 * @return
+	 */
 	public ArrayList<Unit> readRawDataList(ArrayList<String> shapeFiles){
 		ArrayList<Unit> allUnits = new ArrayList<Unit>();
 		for(String file: shapeFiles){
@@ -99,6 +124,11 @@ public class Read {
 		return allUnits;
 	}
 	
+	/**
+	 * Reads each feature in shape file and processes it into a levin.unit class
+	 * @return ArrayList<Unit> units - list of all of the units
+	 * O(n)
+	 */
 	public ArrayList<Unit> readRawData(){
 		ArrayList<Unit> unitList = new ArrayList<Unit>();
 	    ArrayList<String> uniqueCounties = new ArrayList<String>();
@@ -106,15 +136,18 @@ public class Read {
 		try {	   	  
 		  //Read in census block shapefile
 		  File file = new File(SHAPE_FILE);
-		  Map connect = new HashMap();
-		  connect.put("url", file.toURL());
+		  Map<String, URL> connect = new HashMap<String, URL>();
+		  connect.put("url", file.toURI().toURL());
 		  
 		  DataStore dataStore = DataStoreFinder.getDataStore(connect);
 		  String[] typeNames = dataStore.getTypeNames();
 		  String typeName = typeNames[0];
 
+		  @SuppressWarnings("rawtypes")
 		  FeatureSource featureSource = dataStore.getFeatureSource(typeName);
+		  @SuppressWarnings("rawtypes")
 		  FeatureCollection collection = featureSource.getFeatures();
+		  @SuppressWarnings("rawtypes")
 		  FeatureIterator iterator = collection.features();
 		  System.out.println("Collection Size:" + collection.size());
 	      UNIT_COUNTER = collection.size();
@@ -129,19 +162,16 @@ public class Read {
 		      SimpleFeature feature = (SimpleFeature) iterator.next();
 		      int population;
 		      String blockId;
-
 		      
 		      if(IS_BLOCK){
 			      blockId = feature.getAttribute(CENSUS_BLOCK_ID_ATTR).toString();
 			      population = Integer.parseInt(feature.getAttribute(CENSUS_POP_ATTR).toString());
 		      }else{
-		    	  blockId = feature.getAttribute(CENSUS_TRACT_ID_ATTR).toString();
-		    	  population = getTractPop(tractData, blockId);
+			    	  blockId = feature.getAttribute(CENSUS_TRACT_ID_ATTR).toString();
+			    	  population = getTractPop(tractData, blockId);
 		      }
 		      
-
-		      
-		      Read.POPULATION += population;
+		      POPULATION += population;
 		      MultiPolygon multiPolygon = (MultiPolygon) feature.getDefaultGeometry();		      
 		      Point centroid = multiPolygon.getCentroid();
 		      Unit u = new Unit(blockId, centroid, population, multiPolygon);
@@ -157,8 +187,8 @@ public class Read {
 		  }
 		  	
 		  	
-		    iterator.close();
-		    dataStore.dispose();
+		  iterator.close();
+		  dataStore.dispose();
 		} catch (Throwable e) {
 			System.err.println(e.getMessage());
 			e.printStackTrace();
@@ -170,11 +200,6 @@ public class Read {
 		Messenger.log("Min Unit=" + populationStat.getMin());
 		Messenger.log("NumCounties=" + uniqueCounties.size());
 		return unitList;
-	}
-	
-	private ArrayList<Unit> read() {
-		return cleanUnits(readRawData());
-		//return unitList;
 	}
 	
 
@@ -208,7 +233,6 @@ public class Read {
 		        br.close();
 		        return readPop(everything);
 		    } catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 				return null;
 			}
@@ -241,6 +265,14 @@ public class Read {
 		return population;
 	}
 	
+	/**
+	 * Check the geometry of each unit to see if it has multiple polygons. Merge appropriate units
+	 * to make each unit a simple polygon.
+	 * 
+	 * O(n^2) because of find neighbors
+	 * @param units
+	 * @return new list of units
+	 */
 	private ArrayList<Unit> cleanUnits(ArrayList<Unit> units){
 		int previousEditCount = -1;
 		Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
@@ -249,7 +281,9 @@ public class Read {
 			previousEditCount = EDITED_UNITS;
 			mergeMultiPolygonUnits(units);
 		}
-		mergeNestedUnits(units);
+		//mergeNestedUnits(units);
+		//this is not necessary because there will be other units that are valid that will break
+		//compactness. We will need to do post processing and flip bad assignments
 		
 		SummaryStatistics populationStat = new SummaryStatistics();
 		for(Unit u: units){
@@ -265,43 +299,12 @@ public class Read {
 		
 		return units;
 	}
-	
-	private ArrayList<Unit> mergeNestedUnits(ArrayList<Unit> units){
-		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
-		ArrayList<Unit> addUnits = new ArrayList<Unit>();
-		for(Unit u: units){
-			Logger.log("Polygon Cast:" + u.getId());
-			boolean hasHoles = ((Polygon)u.getGeometry().union()).getNumInteriorRing() != 0;
-			if(hasHoles && u.getId().length() > 2){
-				EDITED_UNITS ++;
-				Logger.log("Editing: " + u.getId());
-				Logger.log("Edit Count: " + EDITED_UNITS);
-				removeUnits.add(u);//has holes so remove and replace with new unit with no holes
-				UnitGroup mergedUnits = new UnitGroup(u.getId(), u.getCentroid(), u.getPopulation(), u.getGeometry());
-				ArrayList<Unit> insideUnits = findInsideUnits(u, units);
-				removeUnits.addAll(insideUnits);//remove all inside units because it's replaced with new unit with no holes
-				for(Unit innerUnit: insideUnits){
-					mergedUnits.addUnit(innerUnit);
-				}
-				addUnits.add(mergedUnits);
-			}
-		}
-		
-		return updateUnitList(units, removeUnits, addUnits);
-	}
-	
-	private ArrayList<Unit> findInsideUnits(Unit big, ArrayList<Unit> units){
-		ArrayList<Unit> insideUnits = new ArrayList<Unit>();
-		for(Unit u: units){
-			if(!u.getId().equals(big.getId()) && u.getId().length() > 2  
-					&& u.getId().substring(0, 11).equals(big.getId().substring(0, 11))// the first parts of the id should be similar denoting that they are in the same general vicinity
-					&& big.getGeometry().within(u.getGeometry())){
-				insideUnits.add(u);
-			}
-		}
-		return insideUnits;
-	}
-	
+	/**
+	 * O(n^2) in worst case, practically O(n) because there are only a handful of these units
+	 * and only a few units for each one have to be merged
+	 * @param units
+	 * @return
+	 */
 	private ArrayList<Unit> mergeMultiPolygonUnits(ArrayList<Unit> units){
 		ArrayList<Unit> addUnits = new ArrayList<Unit>();
 		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
@@ -348,12 +351,14 @@ public class Read {
 	}
 	
 	public ArrayList<Unit> getRawUnits(){
-		return this.RAW_UNITS;
+		return UNITS;
 	}
-	
+	/** 
+	 * O(n^2) look at every pair of units to see if they are neighbors
+	 * @param units
+	 */
 	private void findNeighbors(ArrayList<Unit>units) {
 		System.out.println("Starting neighbor calculation - FYI O(n^2)");
-		int len = units.size();
 		for(Unit u1: units) {
 			Geometry g1 = u1.getGeometry();
 			for(Unit u2: units) {

@@ -36,6 +36,11 @@ public class Unit{
 	public void setPopulation(int population) {
 		this.population = population;
 	}
+	
+	public void mergeUnit(Unit u) {
+		this.id += "," + u.getId();
+		this.population += u.getPopulation();
+	}
 
 	public Point getCentroid() {
 		return centroid;

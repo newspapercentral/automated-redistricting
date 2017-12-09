@@ -9,6 +9,7 @@ import levin.kdtree.DistanceFunction;
 import levin.kdtree.KdTree;
 import levin.kdtree.NearestNeighborIterator;
 import levin.kdtree.SquareEuclideanDistanceFunction;
+import levin.preprocess.Read;
 import levin.printout.ErrorLog;
 import levin.printout.Logger;
 import levin.printout.Messenger;
