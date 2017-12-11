@@ -3,20 +3,22 @@ package levin;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.Point;
 
 import levin.geom.utils.MultiPolygonFlatener;
 import levin.kdtree.DistanceFunction;
 import levin.kdtree.KdTree;
 import levin.kdtree.NearestNeighborIterator;
 import levin.kdtree.SquareEuclideanDistanceFunction;
-import levin.preprocess.Read;
+import levin.preprocess.PreProcess;
 import levin.printout.ErrorLog;
 import levin.printout.Logger;
 import levin.printout.Messenger;
-
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Point;
 
 public class Main {
 
@@ -40,9 +42,8 @@ public class Main {
 	public static String ADDED_UNIT_ID = "13";
 	private static double[][] defaultSearchPoints;
 	
-	//TODO comment and java docs
-	//TODO change System.exit to proper error throwing and handling
-			//* and loop through all the states for a full run
+	private static HashMap<String, Unit> UNIT_MAP = new HashMap<String, Unit>();
+	
 	public static void main(String[] args) {
 		Messenger.log("Processing with " + args.length + " args");
 		if(args.length > 3){
@@ -81,13 +82,13 @@ public class Main {
 			Logger.log("Running with default values");
 			STATE = "hi";
 			k = 2;
-			DOC_ROOT = "/Users/Harry/Desktop/data";
+			DOC_ROOT = "/Users/Harry/Desktop/Archive/data";
 			DEBUG = false;
 			Logger.setDebugFlag(DEBUG);
-			IS_BLOCK=false;
+			IS_BLOCK=true;
 			SWAPS = true;
-			dataFilePath = "/tl_2010_" + CompactnessCalculator.getFIPSString(STATE) + "_tract10/";
-			shapeFilePath = "tl_2010_15_tract10.shp";
+			dataFilePath = "/TEST/";
+			shapeFilePath = "TEST.shp";
 			popFilePath = "tract-pop.txt";
 			csvFilePath = STATE + "-csv.csv";
 			Messenger.log("STATE=" + STATE + ", k=" + k + " , DOC_ROOT=" + DOC_ROOT 
@@ -99,8 +100,7 @@ public class Main {
 		if(!validateRequirements()){
 			//ErrorLog.log("One or more expected data files does not exist");
 		}
-		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK);
-		District stateWideDistrict = r.getDistrictList(STATE).getDistrict(0);
+		District stateWideDistrict = readPreProcess();
 		defaultSearchPoints = getDefaultSearchPoints(stateWideDistrict.getGeometry());
 		DistrictList finalDistricts = divideAndConquer(k, stateWideDistrict);
 		Messenger.log("-----------------FINAL DISTRICTS---------------------");
@@ -110,10 +110,25 @@ public class Main {
 		//Write.write(STATE + "-shapedata.csv", finalDistricts.toString());
 		CompactnessCalculator calculator = new CompactnessCalculator(DOC_ROOT, finalDistricts, STATE);
 		Messenger.log(calculator.toString());
-		String[] blockAssignmentData = printBlockAssignmentList(r.getRawUnits(), finalDistricts);
+//TODO 
+		//		String[] blockAssignmentData = printBlockAssignmentList(r.getRawUnits(), finalDistricts);
 		//TODO
 		//Write.write(blockAssignmentData[0], blockAssignmentData[1]);
 		Messenger.log("DONE :-)");
+	}
+	
+	private static District readPreProcess() {
+		String blockString = (IS_BLOCK) ? "block" : "tract"; 
+		String preprocessFile = STATE + "-" + blockString + "-preprocess.txt";
+		PreProcess pp = new PreProcess(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, 
+				preprocessFile, IS_BLOCK, STATE);	
+		ArrayList<Unit> units = pp.readPreProcess();
+		District stateWideDistrict = new StateWideDistrict(STATE, DOC_ROOT);
+		for (Unit u : units) {
+			UNIT_MAP.put(u.getId(), u);
+			stateWideDistrict.add(u);
+		}
+		return stateWideDistrict;
 	}
 	
 	private static DistrictList divideAndConquer(int numDistrictsLeft, District d){
@@ -209,29 +224,94 @@ public class Main {
 		return bestDistricts;
 	}
 	
-	private static DistrictList redistrict(District district, int idealPop, double[] searchPoint, boolean optimizeMax){
-		DistrictList districts = new DistrictList(2);		
+	private static Unit getClosestUnit(double[] seed, DistanceFunction d, ArrayList<Unit> units, ArrayList<String> ids) {
+		Unit result = null;
+		double distance = Integer.MAX_VALUE;
+		//for first unit find the closest one
+		if(units != null) {
+			for(Unit u: units) {
+				double[] centroid = { u.centroid.getX(), u.centroid.getY()};
+				double dis = d.distance(seed, centroid);
+				if(dis < distance) {
+					result = u;
+					distance = dis;
+				}
+			}
+		} 
+		//Similar code if we're looking up id
+		else if(ids != null) {
+			for(String id: ids) {
+				Unit u = UNIT_MAP.get(id);
+				double[] centroid = { u.centroid.getX(), u.centroid.getY()};
+				double dis = d.distance(seed, centroid);
+				if(dis < distance) {
+					result = u;
+					distance = dis;
+				}
+			}
+		}
+		return result;
+	}
+	
+	private static void addToNeighbors(Unit u, DistrictList d, ArrayList<String> neighbors) {
+		for(String id: u.getNeighbors()) {
+			boolean is_member = false;
+			for(Unit member: d.getDistrict(0).getMembers()) {
+				if(member.getId().equals(id)) {
+					is_member = true;
+				}
+			}
+			for(Unit member: d.getDistrict(1).getMembers()) {
+				if(member.getId().equals(id)) {
+					is_member = true;
+				}
+			}
+			if(!is_member && !neighbors.contains(id)) {
+				neighbors.add(id);
+			}
+		}
+	}
 		
-		KdTree<Unit> kd = makeKdTree(district.getMembers());
-		int maxPointsReturned = kd.size();
-		DistanceFunction d = new SquareEuclideanDistanceFunction();
+	private static DistrictList redistrict(District district, int idealPop, double[] searchPoint, boolean optimizeMax){
+
 		Messenger.log("");
 		Messenger.log("\tUsing searchPoint: " + searchPoint[0] + " , " + searchPoint[1] );
-		NearestNeighborIterator<Unit> iterator = kd.getNearestNeighborIterator(searchPoint, maxPointsReturned, d);
-		
-		Messenger.log("\tsize=" + kd.size());
 		Messenger.log("\tidealPop=" + idealPop); 
-		
-		while(iterator.hasNext()){			
-			Unit u = iterator.next();
+		DistrictList districts = new DistrictList(2);
+		DistanceFunction d = new SquareEuclideanDistanceFunction();
+		ArrayList<String> neighborsD0 = new ArrayList<String>();
+		ArrayList<String> neighborsD1 = new ArrayList<String>();
 
-			if(districts.getDistrict(0).getDistrictPopulation() <= idealPop){
-				//districts.getDistrict(0).addContiguousUnit(u);
-				districts.getDistrict(0).add(u);
+		//add first unit
+		Unit first = getClosestUnit(searchPoint, d, district.getMembers(), null);
+		districts.getDistrict(0).add(first);
+		neighborsD0.addAll(first.getNeighbors());
+		boolean flipped_districts = false;
+
+		while(districts.getDistrict(0).getMembers().size() + districts.getDistrict(1).getMembers().size() != district.getMembers().size()){			
+			ArrayList<String> neighbors = (flipped_districts) ? neighborsD1: neighborsD0;
+			Unit next = getClosestUnit(searchPoint, d, null, neighbors);
+			//assign any remaining units for first district
+			if(next == null && flipped_districts && neighborsD0.size()>0) {
+				for(String s: neighborsD0) {
+					districts.getDistrict(0).add(UNIT_MAP.get(s));
+				}
+				break;//done with this iteration
+			}
+			int districtPop = districts.getDistrict(0).getDistrictPopulation();
+			if(!flipped_districts && Math.abs(districtPop - idealPop) >= Math.abs(districtPop + next.getPopulation() - idealPop) ){
+				districts.getDistrict(0).add(next);
+				neighborsD0.remove(next.getId());//need to track added units and not add them back to neighbors
+				addToNeighbors(next, districts, neighborsD0);
+				//TODO reset neighbors for d1 and see which ones are left over, assign these to d1
 			}else{
+				flipped_districts = true;
 				//have to add this so it is assigned
-				districts.getDistrict(1).add(u);
-				
+				districts.getDistrict(1).add(next);
+				neighborsD0.remove(next.getId());//need to track added units and not add them back to neighbors
+				neighborsD1.remove(next.getId());//need to track added units and not add them back to neighbors
+				addToNeighbors(next, districts, neighborsD1);
+
 			}
 		}
 		//Assign anything left over that we missed
