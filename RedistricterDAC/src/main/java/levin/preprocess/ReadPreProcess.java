@@ -5,7 +5,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import com.vividsolutions.jts.geom.MultiPolygon;
+import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKTReader;
@@ -17,13 +17,16 @@ import levin.Unit;
  * @author Harry
  *
  */
-public class ReadPreProcess extends Read{
+public class ReadPreProcess{
 
 	private static String DAT_FILE;
+	private static String DOC_ROOT;
+	private static String dataFilePath;
 	
-	public ReadPreProcess(String doc_root, String dataFilePath, String shapeFile, String popFile, boolean isBlock, String datFile) {
-		super(doc_root, dataFilePath, shapeFile, popFile, isBlock);
+	public ReadPreProcess(String doc_root, String _dataFilePath, String datFile) {
 		DAT_FILE = datFile;
+		DOC_ROOT = doc_root;
+		dataFilePath = _dataFilePath;
 	}
 	
 	public ArrayList<Unit> readFile() {
@@ -33,7 +36,7 @@ public class ReadPreProcess extends Read{
 
 		try {
 			//Read in data file
-		    in = new FileReader(DATA_PATH + "/" + DAT_FILE);
+		    in = new FileReader(DOC_ROOT + dataFilePath + "/" + DAT_FILE);
 		    br = new BufferedReader(in);
 		    
 		    String line = br.readLine();//getFristLine
@@ -58,7 +61,7 @@ public class ReadPreProcess extends Read{
 	
 	private Unit initializeUnit(String line) {
 		Point centroid = null;
-		MultiPolygon geometry = null;
+		Geometry geometry = null;
 	    WKTReader wkt = new WKTReader();
 
 		String[] data = line.split("\\|");//"|" is the delimeter of the data
@@ -67,7 +70,7 @@ public class ReadPreProcess extends Read{
 		String[] neighbors = data[3].split(";");//";" is the delimeter for neighbors
 		try {
 			centroid = (Point) wkt.read(data[2]);
-			geometry = (MultiPolygon) wkt.read(data[4]);
+			geometry = (Geometry) wkt.read(data[4]);
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}

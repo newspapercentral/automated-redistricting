@@ -6,15 +6,12 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
-
-import levin.DistrictList;
-import levin.StateWideDistrict;
-import levin.Unit;
-import levin.UnitGroup;
-import levin.printout.Logger;
-import levin.printout.Messenger;
+import java.util.Set;
 
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 import org.geotools.data.DataStore;
@@ -24,9 +21,21 @@ import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
 import org.opengis.feature.simple.SimpleFeature;
 
+import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
+
+import levin.DistrictList;
+import levin.StateWideDistrict;
+import levin.Unit;
+import levin.UnitGroup;
+import levin.kdtree.DistanceFunction;
+import levin.kdtree.KdTree;
+import levin.kdtree.NearestNeighborIterator;
+import levin.kdtree.SquareEuclideanDistanceFunction;
+import levin.printout.Logger;
+import levin.printout.Messenger;
 
 /** 
  * Read and process shape files for tracts and blocks
@@ -39,9 +48,10 @@ public class Read {
 	private static String POP_FILE;
 	
 	private static int POPULATION;
-	private int UNIT_COUNTER;
+	private static int UNIT_COUNTER;
 	private static String DOC_ROOT;
 	protected static String DATA_PATH;
+	private static int MAX_NEIGHBORS;
 	
 	/**
 	 * Census attribute name for census block IDs
@@ -71,7 +81,7 @@ public class Read {
 	 * @param isBlock ("true"|"false") - true if the data is census blocks; false for census tracts
 	 * O(1)
 	 */
-	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock){
+	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock, int max_neighbors){
 		DOC_ROOT = doc_root;
 		DATA_PATH = doc_root + dataFilePath;
 		SHAPE_FILE = doc_root + dataFilePath + shapeFile;
@@ -81,7 +91,7 @@ public class Read {
 		EDITED_UNITS=0;
 		UNITS = new ArrayList<Unit>();
 		IS_BLOCK = isBlock;
-		
+		MAX_NEIGHBORS = max_neighbors;
 	}
 	
 	/**
@@ -274,6 +284,7 @@ public class Read {
 	 * @return new list of units
 	 */
 	private ArrayList<Unit> cleanUnits(ArrayList<Unit> units){
+		//STARTED HERE
 		int previousEditCount = -1;
 		Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
 		while(previousEditCount < EDITED_UNITS){
@@ -281,6 +292,8 @@ public class Read {
 			previousEditCount = EDITED_UNITS;
 			mergeMultiPolygonUnits(units);
 		}
+		
+		//ENDED HERE
 		//mergeNestedUnits(units);
 		//this is not necessary because there will be other units that are valid that will break
 		//compactness. We will need to do post processing and flip bad assignments
@@ -308,6 +321,10 @@ public class Read {
 	private ArrayList<Unit> mergeMultiPolygonUnits(ArrayList<Unit> units){
 		ArrayList<Unit> addUnits = new ArrayList<Unit>();
 		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
+		//ISSUE: A & B ==> A,B
+		//B &C ==> B,C  SHOULD BE A,B,C
+		//keep track of index in units to return to after I fix one of them
+		//look at updated list
 		for(Unit u: units){
 			if(u.getGeometry().getNumGeometries() > 1){
 				EDITED_UNITS ++;
@@ -328,6 +345,10 @@ public class Read {
 	private ArrayList<Unit> findInBetweenUnits(Unit multi, ArrayList<Unit> units){
 		ArrayList<Unit> mergeUnits = new ArrayList<Unit>();
 		ArrayList<Unit> neighbors = new ArrayList<Unit>();
+		//make this a KD tree - should run faster
+			//Look for single unit to fix it (99% of cases)
+				//Keep track of all neighbors and merge all of them if nothing fixes it
+				//Break and restart again
 		for(Unit u: units){
 			
 			if(!u.getId().equals(multi.getId())
@@ -358,19 +379,88 @@ public class Read {
 	 * @param units
 	 */
 	private void findNeighbors(ArrayList<Unit>units) {
-		System.out.println("Starting neighbor calculation - FYI O(n^2)");
+		System.out.println("Starting neighbor calculation - FYI O(n^2): 2.0");
+		int counter = 0;
+		int coordinates= 0;
+		System.out.println("Making tree");
+		KdTree <Unit> kd = makeTree(units);//O(n) to make tree
 		for(Unit u1: units) {
-			Geometry g1 = u1.getGeometry();
-			for(Unit u2: units) {
+			System.out.println("u1: " + u1.getId());
+			counter ++;
+			if(counter == 1) {
+				System.out.println("#1 through");
+			}
+			if(counter == 10) {
+				System.out.println("#10 through");
+			}
+			if(counter == 100) {
+				System.out.println("#100 through");
+			}
+			if(counter == 1000) {
+				System.out.println("#1,000 through");
+			}
+			if(counter == 10000) {
+				System.out.println("#10,000 through");
+			}
+			if(counter == units.size()/4) {
+				System.out.println("25% through");
+			}
+			if(counter == units.size()/2) {
+				System.out.println("50% through");
+			}
+			if(counter == units.size()*3/4) {
+				System.out.println("75% through");
+			}
+			ArrayList<Coordinate> c1 = new ArrayList<Coordinate> ();
+			c1.addAll(Arrays.asList(u1.getGeometry().getCoordinates()));
+			coordinates += c1.size();
+			for(Unit u2: getXNeighbors(kd, u1, MAX_NEIGHBORS)) {
+				System.out.println("u2: " + u2.getId());
 				if(u1.getId() != u2.getId()) {
-					Geometry g2 = u2.getGeometry();
-					String inter = g1.intersection(g2).toText();
-					if(!inter.contains("EMPTY") && !inter.contains("POINT")) {
+					ArrayList<Coordinate> c2 = new ArrayList<Coordinate> ();
+					c2.addAll(Arrays.asList(u2.getGeometry().getCoordinates()));
+					c2.retainAll(c1);
+					//remove duplicates
+					Set<Coordinate> s = new HashSet<Coordinate>();
+					s.addAll(c2);
+					//units must have more than 1 coordinate in common to be neighbors
+					if(s.size() > 1) {
+					//Geometry g2 = u2.getGeometry();
+					//String inter = g1.intersection(g2).toText();
+					
+					//if(!inter.contains("EMPTY") && !inter.contains("POINT")) {
 						u1.addNeighbor(u2.getId());
 					}
 				}
 			}
 		}
+		System.out.println("Total Coordinates:" + coordinates);
+	}
+	
+	private static ArrayList<Unit> getXNeighbors(KdTree<Unit> kd, Unit u, int numNeighbors){
+		ArrayList<Unit> result = new ArrayList<Unit>();
+		DistanceFunction d = new SquareEuclideanDistanceFunction();
+		Point centroid = u.getCentroid();
+		double[] cent = {centroid.getY(), centroid.getX()};
+		System.out.println("\t Making NeartestNeighborIterator");
+		NearestNeighborIterator<Unit> iterator = kd.getNearestNeighborIterator(cent, numNeighbors, d);
+		
+		System.out.println("\t Starting while loop");
+		while(iterator.hasNext()) {
+			Unit nextUnit = iterator.next();
+			result.add(nextUnit);
+		}
+		return result;
+	}
+	
+	private static KdTree<Unit> makeTree(ArrayList<Unit> units) {
+		KdTree<Unit> kd = new KdTree<Unit>(2);//x, y dimensions
+		for(Unit u : units) {
+			Point centroid = u.getCentroid();
+			double[] cen = {centroid.getY(), centroid.getX()};
+			kd.addPoint(cen, u);
+		}
+		return kd;
 	}
 
 }

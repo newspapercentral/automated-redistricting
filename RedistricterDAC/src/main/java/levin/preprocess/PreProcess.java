@@ -5,8 +5,11 @@ import java.io.File;
 import java.io.FileWriter;
 import java.util.ArrayList;
 
+import com.vividsolutions.jts.geom.Point;
+
 import levin.District;
 import levin.Unit;
+import levin.kdtree.KdTree;
 /**
  * This class reads and writes shape files for census tracts and census blocks. The output file
  * creates a population unit graph that can be used in any redistricting algorithm. The processed
@@ -19,17 +22,18 @@ public class PreProcess {
 	//Default values
 	static String ACTION = "write";
 	static String DOC_ROOT = "/Users/Harry/Desktop/Archive/data";
-	static String dataFilePath = "/TEST/";
-	static String shapeFilePath = "TEST.shp";
+	static String dataFilePath = "/TEST_TRACT/";
+	static String shapeFilePath = "TEST_TRACT.shp";
 	static String popFilePath = "tract-pop.txt";
 	static String PRE_PROCESS_FILE = "preprocess.txt";
-	static boolean IS_BLOCK=true;
+	static boolean IS_BLOCK=false;
 	static String STATE = "hi";
+	static int MAX_NEIGHBOR = 100;
 	
 	static String BLOCK_STRING = "null";
 
 	public PreProcess (String doc_root, String data_file, String shape_file, String pop_file, 
-			String pre_process_file, boolean is_block, String state) {
+			String pre_process_file, boolean is_block, String state, int max_neighbor) {
 		DOC_ROOT = doc_root;
 		dataFilePath = data_file;
 		shapeFilePath = shape_file;
@@ -37,11 +41,12 @@ public class PreProcess {
 		PRE_PROCESS_FILE = pre_process_file;
 		IS_BLOCK = is_block;
 		STATE = state;
+		MAX_NEIGHBOR = 100;
 	}
 	
 	public static void main(String[] args) {
 		readParams(args);
-		if(ACTION.equals("read")) {
+		if(ACTION.equalsIgnoreCase("read")) {
 			ArrayList<Unit> units = readPreProcess();
 			System.out.println(units.get(0).toString());
 		}else if(ACTION.equalsIgnoreCase("write")) {
@@ -70,7 +75,7 @@ public class PreProcess {
 	 * args[7] = two letter state ID (ex: "hi" for Hawaii)
 	 */
 	private static void readParams(String args[]) {
-		if(args.length == 8) {
+		if(args.length == 9) {
 			ACTION = args[0];
 			DOC_ROOT = args[1];
 			dataFilePath = args[2];
@@ -79,6 +84,7 @@ public class PreProcess {
 			PRE_PROCESS_FILE = args[5];
 			IS_BLOCK = args[6].equals("true");
 			STATE = args[7];
+			MAX_NEIGHBOR = Integer.parseInt(args[8]);
 		}else {
 			System.out.println("WARNING: using defaults params");
 		}
@@ -95,7 +101,7 @@ public class PreProcess {
 	 * @return list of population units using the levin.unit class
 	 */
 	public static ArrayList<Unit> readPreProcess() {
-		ReadPreProcess r = new ReadPreProcess(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK, PRE_PROCESS_FILE);
+		ReadPreProcess r = new ReadPreProcess(DOC_ROOT, dataFilePath, PRE_PROCESS_FILE);
 		return r.readFile();
 	}
 	
@@ -103,9 +109,8 @@ public class PreProcess {
 	 * Reads data from parameters and write processed data out to a text file.
 	 */
 	public static void writePreProcess() {
-		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK);
+		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK, MAX_NEIGHBOR);
 		District stateWideDistrict = r.getDistrictList(STATE).getDistrict(0);
-		
 		BufferedWriter writer = null;
 	    try {
 	    		//create file ex:/Users/Harry/Desktop/Archive/data/TEST_TRACT/hi-tract-preprocess.txt
@@ -113,9 +118,15 @@ public class PreProcess {
 	    		System.out.println(logFile.getCanonicalPath());
 	
 	    		writer = new BufferedWriter(new FileWriter(logFile));
+	    		int totalPop = 0;
+	    		int numUnits = 0;
 	    		for(Unit u: stateWideDistrict.getMembers()) {
 	    			writer.write(u.toString() + "\n");
+	    			numUnits ++;
+	    			totalPop += u.getPopulation();
 	    		}
+	    		System.out.println("Num Units: " + numUnits);
+	    		System.out.println("totalPop: " + totalPop);
 	    } catch (Exception e) {
 	        e.printStackTrace();
 	    } finally {
@@ -127,5 +138,4 @@ public class PreProcess {
 	        }
 	    }
 	}
-
 }
