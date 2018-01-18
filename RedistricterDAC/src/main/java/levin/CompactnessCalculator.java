@@ -24,14 +24,14 @@ public class CompactnessCalculator {
 	private DistrictList district;
 	private int FIPS;
 	
-	private SummaryStatistics statOurConvexHull;
-	private SummaryStatistics statOurReock;
-	private SummaryStatistics statOurPolsbyPopper;
-	private SummaryStatistics statOurModifiedSchwartzberg;
-	private SummaryStatistics statCongConvexHull;
+	public SummaryStatistics statOurConvexHull;
+	public SummaryStatistics statOurReock;
+	public SummaryStatistics statOurPolsbyPopper;
+	public SummaryStatistics statOurModifiedSchwartzberg;
+	public SummaryStatistics statCongConvexHull;
 //	private SummaryStatistics statCongReock = new SummaryStatistics();
-	private SummaryStatistics statCongPolsbyPopper = new SummaryStatistics();
-	private SummaryStatistics statCongModifiedSchwartzberg = new SummaryStatistics();
+	public SummaryStatistics statCongPolsbyPopper = new SummaryStatistics();
+	public SummaryStatistics statCongModifiedSchwartzberg = new SummaryStatistics();
 	
 	public CompactnessCalculator(String docroot, DistrictList districts, String stateId){
 		dataFilePath = docroot + "/2012Congress/2012Congress.shp";

@@ -8,6 +8,8 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 
+import levin.printout.ErrorLog;
+
 public class District {
 	protected ArrayList<Unit> members;
 	protected ArrayList<Unit> actualMembers;
@@ -28,14 +30,18 @@ public class District {
 	}
 	
 	public void add(Unit u){
-		members.add(u);
-		population += u.getPopulation();
-		addGeometryCollection(u.getGeometry());
-		
-		if(u.getId().length() > 5){
-			this.actualMembers.add(u);
-			this.actualGeomList.add(u.getGeometry());
-		}
+		if(!this.contains(u)) {
+			members.add(u);
+			population += u.getPopulation();
+			addGeometryCollection(u.getGeometry());
+			
+			if(u.getId().length() > 5){
+				this.actualMembers.add(u);
+				this.actualGeomList.add(u.getGeometry());
+			}
+		}else {
+			System.err.println("Trying to add unit that is already a memeber");
+			System.exit(0);		}
 	}
 	
 	public void remove(Unit u){
@@ -52,7 +58,23 @@ public class District {
 	}
 	
 	public boolean contains(Unit u){
-		return members.contains(u);
+		boolean result = false;
+		for(Unit mem: members) {
+			if(mem.getId().equals(u.getId())) {
+				result = true;
+			}
+		}
+		return result;
+	}
+	
+	public boolean contains(String s){
+		boolean result = false;
+		for(Unit mem: members) {
+			if(mem.getId().equals(s)) {
+				result = true;
+			}
+		}
+		return result;
 	}
 
 	public boolean containsId(String id){
@@ -118,6 +140,12 @@ public class District {
 	
 	public ArrayList<Unit> getActualMembers(){
 		return this.actualMembers;
+	}
+	
+	public double getSimpleCompactnessScore() {
+			double rectArea = this.geometry.getEnvelope().getArea();
+			double dArea = this.geometry.getArea();
+			return Math.abs(rectArea - dArea);
 	}
 	
 	public int getNumCounties(){

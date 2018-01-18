@@ -81,32 +81,6 @@ public class DistrictList {
 		return output;
 	}
 	
-	public void assignSkippedDistricts(){
-		ArrayList<Unit> skippedUnits = new ArrayList<Unit>();
-		for(int i=0; i<this.districtList.length;i++){
-			skippedUnits.addAll(this.districtList[i].getSkippedUnits());
-		}
-		
-		boolean madeChange = true;
-		while(madeChange && skippedUnits.size()>0){
-			madeChange = false;
-			ArrayList<Unit> removeUnit = new ArrayList<Unit>();
-			for(Unit u: skippedUnits){
-				for(int i=0; i<this.districtList.length;i++){
-					if(districtList[i].getGeometry().touches(u.getGeometry())){
-						districtList[i].add(u);
-						removeUnit.add(u);
-						madeChange = true;
-						break;
-					}
-				}
-			}
-			for(Unit u: removeUnit){
-				skippedUnits.remove(u);
-			}
-		}
-	}
-	
 	/**Only works for two districts because otherwise we have blocking problem
 	 * 
 	 * @param u
@@ -166,16 +140,14 @@ public class DistrictList {
 		return this.districtList;
 	}
 	
-	public double getAverageSimpleCompactnessScore(){
-		double areaSum = 0;
-		double perimSum = 0;
+	public double getSimplePlanCompactnessScore(){
+		double worstScore = 0.0;
 		for(District d: this.districtList){
-			areaSum += d.geometry.getArea();
-			perimSum += d.geometry.getLength();
+			if(d.getSimpleCompactnessScore() > worstScore) {
+				worstScore = d.getSimpleCompactnessScore();
+			}
 		}
-		double areaAvg = (areaSum/districtList.length);
-		double perimAvg = (perimSum/districtList.length);
-		return (areaAvg + perimAvg)/2.0;
+		return worstScore;
 	}
 	
 	@Override
@@ -188,7 +160,7 @@ public class DistrictList {
 			result += "\n";
 			result+= index + ";" + 
 					d.getDistrictPopulation() + ";"  +
-					d.getNumCounties() + ";" +
+					d.getNumCounties() + ";\n" +
 					d.getGeometry();
 			index ++;
 		}
