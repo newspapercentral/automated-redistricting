@@ -21,7 +21,7 @@ public class StateWideDistrict extends District {
 	private String DOC_ROOT;
 
 	public StateWideDistrict(String stateId, String doc_root){
-		super();
+		super(1);//only one district
 		ID = stateId;
 		FIPS = CompactnessCalculator.getFIPS(stateId);
 		DOC_ROOT = doc_root;
@@ -29,7 +29,7 @@ public class StateWideDistrict extends District {
 	}
 	
 	@Override
-	public void add(Unit u){
+	public void add(Unit u, boolean updateAssignment){
 		members.add(u);
 		population += u.getPopulation();
 		//We don't need to add unit geom because we know state geometry from another datasource

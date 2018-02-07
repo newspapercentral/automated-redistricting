@@ -23,7 +23,7 @@ public class DistrictList {
 		this.k = k;
 		districtList = new District[k];
 		for(int i=0; i<k; i++){
-			districtList[i] = new District();
+			districtList[i] = new District(i);
 		}
 	}
 	
@@ -41,16 +41,25 @@ public class DistrictList {
 	public District getDistrict(int index){
 		return districtList[index];
 	}
+
+	public int getFirstDistrictDeviation(int idealPop) {
+		int diff = this.districtList[0].getDistrictPopulation() - idealPop;
+		return diff;
+	}
 	
 	public int getDeviation(int idealPop){
-		int largestDiff=0;
-		for(District d : this.districtList){
-			int diff = d.getDistrictPopulation() - idealPop;
-			if(largestDiff<Math.abs(diff)){
-				largestDiff = Math.abs(diff);
+		if(this.districtList.length==2) {
+			return getFirstDistrictDev(idealPop);
+		}else {
+			int largestDiff=0;
+			for(District d : this.districtList){
+				int diff = d.getDistrictPopulation() - idealPop;
+				if(largestDiff<Math.abs(diff)){
+					largestDiff = Math.abs(diff);
+				}
 			}
+			return largestDiff;
 		}
-		return largestDiff;
 	}
 	
 	public double getDeviationPercentage(int idealPop){	
@@ -93,8 +102,8 @@ public class DistrictList {
 				Logger.log(districtList[0].getGeometry().toText());
 				Logger.log("Unit geometry");
 				Logger.log(u.getGeometry().toText());
-				districtList[0].remove(u);
-				districtList[1].add(u);
+				districtList[0].remove(u, true);
+				districtList[1].add(u, true);
 				Logger.log("Swapped " + u.getId());
 				if(Main.DEBUG && (districtList[0].getGeometry().toText().contains("MULTIPOLYGON") ||
 						districtList[1].getGeometry().toText().contains("MULTIPOLYGON"))){
@@ -106,8 +115,8 @@ public class DistrictList {
 				Logger.log(districtList[1].getGeometry().toText());
 				Logger.log("Unit geometry");
 				Logger.log(u.getGeometry().toText());
-				districtList[1].remove(u);
-				districtList[0].add(u);
+				districtList[1].remove(u, true);
+				districtList[0].add(u, true);
 				Logger.log("Swapped " + u.getId());
 			}else{
 				System.err.println("Error: swapping district that is unassigned");

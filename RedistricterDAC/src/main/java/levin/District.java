@@ -12,44 +12,46 @@ import levin.printout.ErrorLog;
 
 public class District {
 	protected ArrayList<Unit> members;
-	protected ArrayList<Unit> actualMembers;
 	protected ArrayList<Unit> skippedUnits;
 	protected Geometry geometry;
 	protected int population;
 	protected ArrayList<Geometry> geomList;
-	protected ArrayList<Geometry> actualGeomList;
+	protected int id;
 	
-	public District(){
+	public District(int _id){
+		id = _id;
 		population = 0;
 		geometry = null;
 		members = new ArrayList<Unit>();
-		actualMembers = new ArrayList<Unit>();
 		skippedUnits = new ArrayList<Unit>();
 		geomList = new ArrayList<Geometry>();
-		actualGeomList = new ArrayList<Geometry>();
 	}
 	
-	public void add(Unit u){
+	public void add(Unit u, boolean updateAssignment){
 		if(!this.contains(u)) {
 			members.add(u);
 			population += u.getPopulation();
 			addGeometryCollection(u.getGeometry());
-			
-			if(u.getId().length() > 5){
-				this.actualMembers.add(u);
-				this.actualGeomList.add(u.getGeometry());
+			u.setDistrictAssignment(this.id);
+			if(updateAssignment) {
+				Main.UNIT_MAP.get(u.getId()).setDistrictAssignment(this.id);
 			}
+
 		}else {
 			System.err.println("Trying to add unit that is already a memeber");
 			System.exit(0);		}
 	}
 	
-	public void remove(Unit u){
+	public void remove(Unit u, boolean updateAssignment){
 		
 		if(this.members.contains(u)){
 			members.remove(u);
 			population -= u.getPopulation();
 			this.geometry = geometry.difference(u.getGeometry());
+			u.setDistrictAssignment(-1);
+			if(updateAssignment) {
+				Main.UNIT_MAP.get(u.getId()).setDistrictAssignment(-1);
+			}
 			
 		}else{
 			System.err.println("Trying to remove unit that's not in this district");
@@ -122,40 +124,31 @@ public class District {
 		return this.skippedUnits;
 	}
 
-	public Geometry getRealGeometry(){
-		Geometry result = null;
-		if(this.actualGeomList.size() > 0){
-			GeometryFactory factory = new GeometryFactory();
+
 	
-		     // note the following geometry collection may be invalid (say with overlapping polygons)
-		     GeometryCollection geometryCollection =
-		          (GeometryCollection) factory.buildGeometry( this.actualGeomList );
-	
-		     result = geometryCollection.union();
-		}else{
-			result = getGeometry();
-		}
-	     return result;
-	}
-	
-	public ArrayList<Unit> getActualMembers(){
-		return this.actualMembers;
-	}
+
 	
 	public double getSimpleCompactnessScore() {
-			double rectArea = this.geometry.getEnvelope().getArea();
-			double dArea = this.geometry.getArea();
-			return Math.abs(rectArea - dArea);
+			//Modified Schwartzberg Measure
+			double districtArea = this.getGeometry().getArea();
+			double radius = Math.sqrt(districtArea/Math.PI);
+			double circlePerim = radius * 2 * Math.PI;
+			double result = (circlePerim/this.getGeometry().getLength());
+			return result;
 	}
 	
 	public int getNumCounties(){
 		ArrayList<String> uniqueCounties = new ArrayList<String>();
-		for(Unit u: this.actualMembers){
+		for(Unit u: this.members){
 			String county = u.getId().substring(2, 5);
 			if(!uniqueCounties.contains(county)){
 				uniqueCounties.add(county);
 			}
 		}
 		return uniqueCounties.size();
+	}
+	
+	public int getId() {
+		return this.id;
 	}
 }

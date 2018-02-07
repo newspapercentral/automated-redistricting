@@ -4,6 +4,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import com.vividsolutions.jts.geom.Point;
 
@@ -22,11 +23,11 @@ public class PreProcess {
 	//Default values
 	static String ACTION = "write";
 	static String DOC_ROOT = "/Users/Harry/Desktop/Archive/data";
-	static String dataFilePath = "/TEST_TRACT/";
-	static String shapeFilePath = "TEST_TRACT.shp";
+	static String dataFilePath = "/TEST/";
+	static String shapeFilePath = "TEST.shp";
 	static String popFilePath = "tract-pop.txt";
 	static String PRE_PROCESS_FILE = "preprocess.txt";
-	static boolean IS_BLOCK=false;
+	static boolean IS_BLOCK=true;
 	static String STATE = "hi";
 	static int MAX_NEIGHBOR = 100;
 	
@@ -110,7 +111,7 @@ public class PreProcess {
 	 */
 	public static void writePreProcess() {
 		Read r = new Read(DOC_ROOT, dataFilePath, shapeFilePath, popFilePath, IS_BLOCK, MAX_NEIGHBOR);
-		District stateWideDistrict = r.getDistrictList(STATE).getDistrict(0);
+		HashMap<String, Unit> units = r.getUnits();
 		BufferedWriter writer = null;
 	    try {
 	    		//create file ex:/Users/Harry/Desktop/Archive/data/TEST_TRACT/hi-tract-preprocess.txt
@@ -120,7 +121,7 @@ public class PreProcess {
 	    		writer = new BufferedWriter(new FileWriter(logFile));
 	    		int totalPop = 0;
 	    		int numUnits = 0;
-	    		for(Unit u: stateWideDistrict.getMembers()) {
+	    		for(Unit u: units.values()) {
 	    			writer.write(u.toString() + "\n");
 	    			numUnits ++;
 	    			totalPop += u.getPopulation();

@@ -16,6 +16,8 @@ import com.vividsolutions.jts.geom.Geometry;
 
 import levin.geom.utils.MultiPolygonFlatener;
 import levin.kdtree.DistanceFunction;
+import levin.kdtree.KdTree;
+import levin.kdtree.NearestNeighborIterator;
 import levin.kdtree.SquareEuclideanDistanceFunction;
 import levin.preprocess.ReadPreProcess;
 import levin.printout.ErrorLog;
@@ -29,7 +31,7 @@ public class Main {
 	public static boolean IS_BLOCK = true;
 	private static boolean SWAPS = true;
 	private static boolean CONTIG = true;
-	private static String MAX_FUNCTION = "pop-contig";
+	private static String MAX_FUNCTION = "pop";
 	private static String REF_FUNCTION = "line";//"point" or "line"
 	private static String BLOCK_STRING = "block";
 	private static int TOTAL_POPULATION = 0;
@@ -48,7 +50,7 @@ public class Main {
 	 */
 	private static double[][] defaultSearchPoints;
 	
-	private static HashMap<String, Unit> UNIT_MAP = new HashMap<String, Unit>();
+	public static HashMap<String, Unit> UNIT_MAP = new HashMap<String, Unit>();
 	
 	public static void main(String[] args) {
 		if(args.length >0 && !validateParams(args)){
@@ -56,13 +58,13 @@ public class Main {
 		}
 		readParams(args);
 		
-		District stateWideDistrict = readPreProcess();
-		TOTAL_POPULATION = stateWideDistrict.getDistrictPopulation();
-		defaultSearchPoints = getDefaultSearchPoints(stateWideDistrict.getGeometry());
-		DistrictList finalDistricts = divideAndConquer(k, stateWideDistrict);
+		District stateWideDistrict = readPreProcess();//O(n)
+		TOTAL_POPULATION = stateWideDistrict.getDistrictPopulation();//O(1)
+		defaultSearchPoints = getDefaultSearchPoints(stateWideDistrict.getGeometry());//O(1)
+		DistrictList finalDistricts = divideAndConquer(k, stateWideDistrict);//O(log k * n^2)
 		double durationInSeconds = (System.currentTimeMillis() - START_TIME)/1000.0;
-		printResults(finalDistricts, "final-districts", durationInSeconds);
-		printBlockAssignmentList(UNIT_MAP.values(), finalDistricts);
+		printResults(finalDistricts, "final-districts", durationInSeconds);//O(1)
+		printBlockAssignmentList(UNIT_MAP.values(), finalDistricts);//O(n)
 		Messenger.log("DONE :-)");
 	}
 	
@@ -83,7 +85,7 @@ public class Main {
 	 * args[10] = String text to add to output files to uniquely identify test runs
 	 */
 	private static void readParams(String args[]) {
-		if(args.length == 11) {
+		if(args.length == 12) {
 			STATE = args[0];
 			k = Integer.parseInt(args[1]);
 			DOC_ROOT = args[2];
@@ -94,10 +96,12 @@ public class Main {
 			SWAPS = args[7].equals("true");
 			CONTIG = args[8].equals("true");
 			MAX_FUNCTION = args[9];
+			
+			
 			PRE_PROCESS_FILE = args[0] + "-" + args[6] + "-preprocess.txt";
 
 			LABEL = args[10];
-			
+			REF_FUNCTION = args[11];
 			//derived values
 			csvFilePath = STATE + "-csv.csv";
 			Logger.setDebugFlag(DEBUG);
@@ -119,12 +123,12 @@ public class Main {
 		District stateWideDistrict = new StateWideDistrict(STATE, DOC_ROOT);
 		for (Unit u : units) {
 			UNIT_MAP.put(u.getId(), u);
-			stateWideDistrict.add(u);
+			stateWideDistrict.add(u, true);
 		}
 		return stateWideDistrict;
 	}
 	
-	private static DistrictList divideAndConquer(int numDistrictsLeft, District d){
+	private static DistrictList divideAndConquer(int numDistrictsLeft, District d){//O(log k*n^2)
 		Messenger.log("Districts Left: " + numDistrictsLeft + " , totalPop= " + d.getDistrictPopulation() + ", idealPop= " +  d.getDistrictPopulation()/numDistrictsLeft);
 		if(numDistrictsLeft == 4) {
 			System.out.println("here");
@@ -175,12 +179,13 @@ public class Main {
 		if(MAX_FUNCTION.equals("pop")) {
 			score = Math.abs(districts.getDeviationPercentage(idealPop));
 		}else if(MAX_FUNCTION.equals("contig")) {
-			score = Math.abs(districts.getSimplePlanCompactnessScore());
+			score = 1- Math.abs(districts.getSimplePlanCompactnessScore());
 
 		}else if(MAX_FUNCTION.equals("pop-contig")) {
 			double pop_score = Math.abs(districts.getDeviationPercentage(idealPop));
 			double contig_score = Math.abs(districts.getSimplePlanCompactnessScore());
-			score = 0.5 * pop_score + 0.5 * contig_score;
+			int penalty = (pop_score > 0.5) ? 100 : 0;
+			score = penalty +  (1- contig_score);
 		} else{
 			ErrorLog.log("invalid MAX_FUNCTION flag. Must be 'pop', 'pop-contig' or 'contig'. Found: " + MAX_FUNCTION);
 		}
@@ -192,11 +197,11 @@ public class Main {
 		DistrictList bestDistricts = null;
 		int index=0;
 		int bestIndex=0;
-		for(int i = 0; i< defaultSearchPoints.length; i++){
-			DistrictList districts = redistrict(d, idealPop, i, maxOptimize);
+		for(int i = 0; i< defaultSearchPoints.length; i++){//O(1)
+			DistrictList districts = redistrict(d, idealPop, i, maxOptimize);//O(n^2)
 			Messenger.log("\tSimpleCompactness:" + districts.getSimplePlanCompactnessScore());
 			Messenger.log("\tPop0:" + districts.getDistrict(0).getDistrictPopulation() +
-					"Pop1:" + districts.getDistrict(1).getDistrictPopulation());
+					"Pop1:" + districts.getDistrict(1).getDistrictPopulation() + "(" + districts.getDeviation(idealPop) + " people different)");
 			Messenger.log("\t" + districts.getDistrict(0).getGeometry().toText());
 			Messenger.log("\t" + districts.getDistrict(1).getGeometry().toText());
 			if(isBestDistrict(districts, bestScore, idealPop) && validateDistrictList(districts, idealPop, d).hasSuccessCode() ) {
@@ -214,110 +219,11 @@ public class Main {
 		Logger.log("DIFF: " + (bestDistricts.getDistrict(0).getDistrictPopulation() - bestDistricts.getDistrict(1).getDistrictPopulation()));
 		Messenger.log("\t" + bestDistricts.getDistrict(0).getGeometry().toText());
 		Messenger.log("\t" + bestDistricts.getDistrict(1).getGeometry().toText());
-
-		/*
-		 * For speed we will run a light version of the optimize in which we only
-		 * swap one level of adjacent units. If we can't get the optimal deviation
-		 * then we will run the full version of optimize, which can swap an infinite
-		 * number of units until the population levels are equal. 
-		 */
-//		if(!maxOptimize && bestDistricts.getFirstDistrictDev(idealPop) > 1){
-//			Messenger.log("********turning on maxOptimize");
-//			bestDistricts = runWithSearchPoints(d, idealPop, true);
-//		}
 		
 		return bestDistricts;
 	}
 	
-	private static Unit getClosestUnit(int refPointIndex, DistanceFunction d, ArrayList<Unit> units, ArrayList<String> ids) {
-		Unit result = null;
-		double distance = Integer.MAX_VALUE;
-		//for first unit find the closest one
-		if(units != null) {
-			for(Unit u: units) {
-				double[] centroid = { u.centroid.getX(), u.centroid.getY()};
-				double[] seed = setRefPointForDistanceCalc(refPointIndex, centroid);
-				double dis = d.distance(seed, centroid);
-				if(dis < distance) {
-					result = u;
-					distance = dis;
-				}
-			}
-		} 
-		//Similar code if we're looking up id
-		else if(ids != null) {
-			for(String id: ids) {
-				Unit u = UNIT_MAP.get(id);
-				double[] centroid = { u.centroid.getX(), u.centroid.getY()};
-				double[] seed = setRefPointForDistanceCalc(refPointIndex, centroid);
-				double dis = d.distance(seed, centroid);
-				if(dis < distance) {
-					result = u;
-					distance = dis;
-				}
-			}
-		}
-		return result;
-	}
-	
-	/**
-	 * Return reference point that will calculate closest to a line of closest to a point based on config param
-	 * @param index
-	 * @param centroid
-	 * @return
-	 */
-	private static double[] setRefPointForDistanceCalc (int index, double[] centroid) {
-		double [] result = {-1.0,-1.0};
-		if(REF_FUNCTION.equals("line")) {
-			if(index == 0 || index == 3) {//lines y=#number
-				result[0] = centroid[0];
-				result[1] = defaultSearchPoints[index][1];
-			}else if(index==1 || index ==2) {//lines x=#number
-				result[0] = defaultSearchPoints[index][0];
-				result[1] = centroid[1];
-			}else {
-				ErrorLog.log("invalid reference point index:" + index);
-			}
-		}else if (REF_FUNCTION.equals("point")) {
-			result = defaultSearchPoints[index];
-		}else {
-			ErrorLog.log("invalid ref_function:" + REF_FUNCTION);			
-		}
-		return result;
-	}
-	
-	private static void addToNeighbors(Unit u, DistrictList d, ArrayList<String> neighbors, District oldDistrict) {
-		for(String id: u.getNeighbors()) {
-			boolean is_member = false;
-			for(Unit member: d.getDistrict(0).getMembers()) {
-				if(member.getId().equals(id)) {
-					is_member = true;
-				}
-			}
-			for(Unit member: d.getDistrict(1).getMembers()) {
-				if(member.getId().equals(id)) {
-					is_member = true;
-				}
-			}
-			if(UNIT_MAP.get(id) == null) {
-				ErrorLog.log("Invalid id: " + id + " for unit: " + u.getId());
-			}
-			if(!is_member && !neighbors.contains(id) && oldDistrict.contains(UNIT_MAP.get(id))) {
-				neighbors.add(id);
-			}
-		}
-	}
-	
-	private static void addUnitToDistrict(Unit u, DistrictList districts, int index, ArrayList<String> neighbors, ArrayList<String> other, District oldDistrict) {
-		int otherIndex = (index == 0)? 1: 0;
-		if(districts.getDistrict(otherIndex).contains(u)) {
-			ErrorLog.log("trying to assign unit twice!: " + u.getId());
-		}
-		districts.getDistrict(index).add(u);
-		neighbors.remove(u.getId());//need to track added units and not add them back to neighbors
-		other.remove(u.getId());//need to track added units and not add them back to neighbors
-		addToNeighbors(u, districts, neighbors, oldDistrict);
-	}
+
 		
 	private static DistrictList redistrict(District district, int idealPop, int refPointIndex, boolean optimizeMax){
 
@@ -326,136 +232,137 @@ public class Main {
 		Messenger.log("\tidealPop=" + idealPop); 
 		DistrictList districts = new DistrictList(2);
 		DistanceFunction d = new SquareEuclideanDistanceFunction();
-		ArrayList<String> neighborsD0 = new ArrayList<String>();
-		ArrayList<String> neighborsD1 = new ArrayList<String>();
-
-		//add first unit
-		Unit next = getClosestUnit(refPointIndex, d, district.getMembers(), null);
-		addUnitToDistrict(next, districts, 0, neighborsD0, neighborsD1, district);
-		boolean flipped_districts = false;
-		int districtPop = districts.getDistrict(0).getDistrictPopulation();
-
-		while(Math.abs(districtPop - idealPop) >= Math.abs(districtPop + next.getPopulation() - idealPop)){			
-			ArrayList<String> neighbors = (!flipped_districts && neighborsD0.size() > 0 ) ? neighborsD0: neighborsD1;
-			next = getClosestUnit(refPointIndex, d, null, neighbors);
-			districtPop = districts.getDistrict(0).getDistrictPopulation();
-				addUnitToDistrict(next, districts, 0, neighborsD0, neighborsD1, district);
+		KdTree<Unit> kd = new KdTree<Unit>(2);
+		for(Unit u: district.getMembers()) {
+			double[] coordinate = {u.getCentroid().getX(), u.getCentroid().getY()};
+			kd.addPoint(coordinate, u);
 		}
-		//Assign anything left over that we missed to the other district
-		 assignSkippedDistricts(districts, district);
+		
+		NearestNeighborIterator<Unit> iterator = kd.getNearestNeighborIterator(defaultSearchPoints[refPointIndex], kd.size(), d);
+		while(iterator.hasNext()){			
+			Unit u = iterator.next();
+
+			if(districts.getDistrict(0).getDistrictPopulation() < idealPop){
+				districts.getDistrict(0).add(u, true);
+			}else{
+				//have to add this so it is assigned
+				districts.getDistrict(1).add(u, true);
+				
+			}
+		}
+		
 		//Fix non-contiguity if we can
 		if(CONTIG){
-			Logger.log("MultiPolygonFlatener process starting");
+			Messenger.log("\t Starting CONTIG (" + districts.getDeviation(idealPop) + "people difference)");
+			Messenger.log("\t\t" + districts.getDistrict(0).getGeometry().toText());
+			Messenger.log("\t\t" + districts.getDistrict(1).getGeometry().toText());
+
 			MultiPolygonFlatener mpf = new MultiPolygonFlatener(districts);
 			Logger.log("made changes: " + mpf.hasChanged());
 			if(mpf.hasChanged()){
 				districts = mpf.getNewDistrictList();
 			}
-			Logger.log("Flattener Test: " );
-			Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
-			Logger.log(String.valueOf(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")));
-			Logger.log(districts.getDistrict(0).getGeometry().toText());
-			Logger.log(districts.getDistrict(1).getGeometry().toText());
-			Logger.log("Deviation: " + districts.getDeviation(idealPop));
 		}
 		if(SWAPS){
-			int lastDeviation = Integer.MAX_VALUE;
-			Logger.log("starting optimize loop");
-			while(districts.getFirstDistrictDev(idealPop) > 1 && districts.getFirstDistrictDev(idealPop) < lastDeviation){
-				Logger.log(districts.getFirstDistrictDev(idealPop) +  "> 1 && " +  "<" + lastDeviation);
-				lastDeviation = districts.getFirstDistrictDev(idealPop);
-				optimizePopulation(districts, idealPop);
-				
-				/*
-				 * Only run optimize once unless we set flag for maxOptimize
-				 */
-				if(!optimizeMax){
-					break;
-				}
+			System.out.println("\tSwapping: " + districts.getDeviation(idealPop) + " people difference");
+			Messenger.log("\t\t" + districts.getDistrict(0).getGeometry().toText());
+			Messenger.log("\t\t" + districts.getDistrict(1).getGeometry().toText());
+
+			ArrayList<String> swappable = new ArrayList<String>();
+			int from;
+			int to;
+			if(districts.getDistrict(0).getDistrictPopulation() > idealPop) {
+				from = 0;
+				to = 1;
+			}else {
+				from = 1;
+				to = 0;
 			}
-			Logger.log("end optimize loop");
+			swappable = getAdjacentUnits(districts.getDistrict(from), districts.getDistrict(to));
+			optimizePopulation(districts, from, to, swappable, idealPop);
 		}
 		double devPercentage = districts.getDeviationPercentage(idealPop);
 		Messenger.log("\tDeviation: " + districts.getDeviation(idealPop) + " people = " + ((double)Math.round(devPercentage * 1000)/1000) + "%");
-		
-		Logger.log(String.valueOf(districts.getDistrict(1).getSkippedUnits().size()));
-		Logger.log(districts.getDistrict(1).getGeometry().toText());
-		Logger.log(districts.getDistrict(0).getGeometry().toText());
-		Logger.log("Is multipolygon: " + districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON"));
-		Logger.log("---------OUTPUTING-------");
-		Logger.log(districts.getDistrict(0).getDistrictPopulation() + " \n"
-				+ districts.getDistrict(1).getDistrictPopulation());
-		Logger.log("DIFF: " + (districts.getDistrict(0).getDistrictPopulation() - districts.getDistrict(1).getDistrictPopulation()));
 		return districts;
 	}
 	
-	public static void assignSkippedDistricts(DistrictList districts, District oldDistrict){
-		for(Unit u: oldDistrict.getMembers()) {
-			if(!districts.getDistrict(0).contains(u) && !districts.getDistrict(1).contains(u)) {
-				districts.getDistrict(1).add(u);
+	private static ArrayList<String> updateSwappable(District from, District to, ArrayList<String> swappables, ArrayList<Unit> changes){
+		System.out.println("updating swappable list: ");
+		for(Unit change: changes) {
+			swappables.remove(change.getId());//remove swappedUnit
+			for(String neigh: change.getNeighbors()) {
+				if(!swappables.contains(neigh) && from.contains(neigh))
+					swappables.add(neigh);
+					System.out.print(neigh + "; ");
 			}
 		}
-	
+		System.out.println("");
+		return swappables;
 	}
 	
-	private static void optimizePopulation(DistrictList districts, int idealPop) {
-		Logger.log("starting optimize pop");
-		Unit bestSwap = null;
-		ArrayList<Unit> swappablesD1 = getSwappabe(districts.getDistrict(1), districts.getDistrict(0));
-		ArrayList<Unit> swappablesD2 = getSwappabe(districts.getDistrict(0), districts.getDistrict(1));
-		while(swappablesD1.size() > 0 && swappablesD2.size() > 0){
-			Logger.log("sizes: " + swappablesD1.size() + " && "  + swappablesD2.size() );
-			if(districts.getDistrict(0).getDistrictPopulation() > idealPop){
-				//negative dev because we need to remove population
-				int currentDev = idealPop - districts.getDistrict(0).getDistrictPopulation();
-				Logger.log("0 > ideal: currentDev = " + currentDev);
-				bestSwap = getBestSwappable(swappablesD1, currentDev, districts.getDistrict(1), districts.getDistrict(0));
-			}else if (districts.getDistrict(0).getDistrictPopulation() < idealPop){
-				int currentDev = districts.getDistrict(0).getDistrictPopulation() - idealPop;
-				Logger.log("1 > ideal: currentDev = " + currentDev);
-				bestSwap = getBestSwappable(swappablesD2, currentDev, districts.getDistrict(0), districts.getDistrict(1));
-			}else{
-				Messenger.log("\tPERFECT DIVISION! :-)");
-				break;
+	private static void optimizePopulation(DistrictList districts, int from, int to, ArrayList<String> swappables, int idealPop) {
+		boolean wasUpdated = true;
+		boolean refreshWasUpdated;;
+		while(wasUpdated) {
+			wasUpdated=false;
+			refreshWasUpdated=true;
+			ArrayList<Unit> changes = new ArrayList<Unit>();
+			while(refreshWasUpdated) {
+				refreshWasUpdated=false;
+				Unit nextUnit = getBestSwappable(swappables, districts, from, to, idealPop);
+				if(nextUnit != null) {
+					System.out.print("\t\t" + nextUnit.getId() + "from " + districts.getDistrict(from).getId() + " to " + districts.getDistrict(to).getId());
+					districts.getDistrict(from).remove(nextUnit, true);
+					districts.getDistrict(to).add(nextUnit, true);
+					swappables.remove(nextUnit.getId());
+					changes.add(nextUnit);
+					wasUpdated = true;
+					refreshWasUpdated = true;
+				}
 			}
-			
-			if(bestSwap != null){
-				Logger.log("bestSwap= " + bestSwap.getId());
-				districts.swap(bestSwap, true);
-			}else{
-				//we didn't find any good units to swap so we're done
-				break;
-			}
+			swappables = updateSwappable(districts.getDistrict(from), districts.getDistrict(to), swappables, changes);
 		}
 	}
 	
-	private static ArrayList<Unit> getSwappabe(District from, District to){
-		ArrayList<Unit> result = new ArrayList<Unit>();
-		for(Unit u: to.getMembers()){
-			//Check deviation is still valid, receiving district is still contiguous and from district is still contiguous
-			if(u.getGeometry().touches(from.getGeometry())
-					&& !u.getGeometry().union(from.getGeometry()).toText().contains("MULTIPOLYGON")
-					&& !to.getGeometry().difference(u.getGeometry()).toText().contains("MULTIPOLYGON")){
-				//Last case eliminates single point contiguity
-				result.add(u);
+	private static ArrayList<String> getAdjacentUnits(District from, District to){
+		ArrayList<String> result = new ArrayList<String>();
+		int districtId = from.getId();
+		for(Unit u: from.getMembers()) {
+			for(String neighbor: u.getNeighbors()) {
+				if(UNIT_MAP.get(neighbor).getDistrictAssignment() != districtId &&
+						to.contains(neighbor)) {
+					result.add(u.getId());
+					break;
+					//don't care about compactness until I try to move it
+					//maintain a list of adjacent units regardless of compactness
+					//take first unit in the list that is valid (improves pop dev doesn't break contiguity)
+					//if there is no valid unit, then we're done
+					//Note: there will always be adjacent units, but not necesarily valid units
+					
+				}
 			}
 		}
 		return result;
 	}
-	
-	private static Unit getBestSwappable(ArrayList<Unit> swappables, int currentDev, District from, District to){
+	// 3 + 7 (ideal 4)
+	private static Unit getBestSwappable(ArrayList<String> swappables, DistrictList districts, int from, int to, int idealPop){
+		System.out.println("BestSwappable for " + districts.getDeviation(idealPop));
 		Unit bestUnit = null;
-		int bestDeviation = currentDev;
-		for(Unit u: swappables){
-			int newDev = currentDev + u.getPopulation();
-			if(Math.abs(newDev) < Math.abs(bestDeviation)
-					&& !u.getGeometry().union(from.getGeometry()).toText().contains("MULTIPOLYGON")
-					&& !to.getGeometry().difference(u.getGeometry()).toText().contains("MULTIPOLYGON")){
+		int bestDeviation = districts.getDeviation(idealPop);
+		for(String s: swappables){
+			Unit u = UNIT_MAP.get(s);
+			int direction = (from == 0 )?  -1 : 1;
+			int newDev = Math.abs(districts.getDistrict(0).getDistrictPopulation() - idealPop + direction * u.getPopulation());
+			
+			boolean improvesDeviation = (newDev <= bestDeviation && districts.getDistrict(from).getDistrictPopulation() > districts.getDistrict(to).getDistrictPopulation());
+			boolean keepsContig = (!u.getGeometry().union(districts.getDistrict(to).getGeometry()).toText().contains("MULTIPOLYGON")
+					&& !districts.getDistrict(from).getGeometry().difference(u.getGeometry()).toText().contains("MULTIPOLYGON"));
+			System.out.println(s + "dev: " + improvesDeviation + "(" +u.getPopulation() + ")"  +" contig: " + keepsContig );
+			if(improvesDeviation && keepsContig){
 				bestUnit = u;
 				bestDeviation = newDev;
 			}
 		}
-		swappables.remove(bestUnit);
 		return bestUnit;
 	}
 
@@ -538,7 +445,7 @@ public class Main {
 	
 	private static boolean validateParams(String[] args){
 		boolean result = true;
-		String validStates = "al,ak,az,ar,ca,co,ct,de,fl,ga,hi,id,il,in,io,ks,ky,la,me,md,ma,mi,mn,ms,mo,mt,ne,nv,nh,nj,nm,ny,nc,nd,oh,ok,or,pa,ri,sc,sd,tn,tx,ut,vt,va,wa,wv,wi,wy";
+		String validStates = "al,ak,az,ar,ca,co,ct,de,fl,ga,hi,id,il,in,ia,ks,ky,la,me,md,ma,mi,mn,ms,mo,mt,ne,nv,nh,nj,nm,ny,nc,nd,oh,ok,or,pa,ri,sc,sd,tn,tx,ut,vt,va,wa,wv,wi,wy";
 		//Validate state
 		if(!validStates.contains(args[0])) {
 			result = false;
@@ -650,7 +557,7 @@ public class Main {
 	}
 	
 	private static void printBlockAssignmentList(Collection<Unit> rawUnits, DistrictList districts){
-		String fileName="BlockAssign_ST_" + CompactnessCalculator.getFIPSString(STATE) + "_" + STATE + "_" + BLOCK_STRING  + "_" + LABEL + "_CD.txt";
+		String fileName="BlockAssign_ST_" + CompactnessCalculator.getFIPSString(STATE) + "_" + STATE + "_" + BLOCK_STRING  + "_" + LABEL + "_CD.csv";
 		int index=1;//start at 1
 		
 		FileWriter fw = null;
@@ -662,30 +569,28 @@ public class Main {
 			out = new PrintWriter(bw);
 			
 			for(District d : districts.getDistrictList()){
-				for(Unit u: rawUnits){
-					if(u.getDistrictAssignment() == -1 &&
-							d.containsId(u.getId())){
-						u.setDistrictAssignment(index);
-					}
+				for(Unit u: d.getMembers()){
+					UNIT_MAP.get(u.getId()).setDistrictAssignment(index);
 				}
 				index++;
 			}
 			
-			for(Unit u: rawUnits){
+			for(Unit u: UNIT_MAP.values()){
 				//Pieces we've merged have to be separated again
-				if(u.getId().contains(",")){
+				if(u.getId().contains(",") || u.getId().contains("-")){
 					for(String piece: u.getId().split(",")){
-						if(u.getDistrictAssignment() <1 && u.getDistrictAssignment() > k) {
-							ErrorLog.log("invalid district assignment: " + u.getId() + "->" + u.getDistrictAssignment());
+						for(String piece2: piece.split("-")) {
+							if(u.getDistrictAssignment() <1 && u.getDistrictAssignment() > k) {
+								ErrorLog.log("invalid district assignment: " + u.getId() + "->" + u.getDistrictAssignment());
+							}
+							out.write(piece2 + "," + u.getDistrictAssignment() + "\n");
 						}
-						out.write(piece + "," + u.getDistrictAssignment() + "/n");
-
 					}
 				}else{
 					if(u.getDistrictAssignment() <1 && u.getDistrictAssignment() > k) {
 						ErrorLog.log("invalid district assignment: " + u.getId() + "->" + u.getDistrictAssignment());
 					}
-					out.write(u.getId() + "," + u.getDistrictAssignment() + "/n");
+					out.write(u.getId() + "," + u.getDistrictAssignment() + "\n");
 				}
 			}
 		}catch(IOException e) {

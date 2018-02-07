@@ -13,7 +13,7 @@ public class Unit{
 	protected Point centroid;
 	protected Geometry geom;
 	protected int districtAssignment;
-	private ArrayList<String> neighbors;
+	protected ArrayList<String> neighbors;
 
 	public Unit(String _id, Point cen, int pop, Geometry geometry){
 		id = _id;
@@ -72,6 +72,16 @@ public class Unit{
 	
 	public ArrayList<String> getNeighbors(){
 		return this.neighbors;
+	}
+	
+	public void replaceNeighbor(String unitID, UnitGroup combined) {
+		this.neighbors.remove(unitID);
+		this.neighbors.remove(combined.getId());
+		this.neighbors.add(combined.getId());
+	}
+	
+	public void removeNeighbor(String unitId) {
+		this.neighbors.remove(unitId);
 	}
 	
 	public void addNeighbor(String s){

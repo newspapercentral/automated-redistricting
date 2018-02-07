@@ -84,14 +84,14 @@ public class CompactnessCalculator {
 		  FeatureIterator iterator = collection.features();		  
 		
 		  while (iterator.hasNext()) {
-			  District d = new District();
+			  District d = new District(1);
 		      SimpleFeature feature = (SimpleFeature) iterator.next();
 		      int fips = Integer.parseInt(feature.getAttribute(FIPS_ATTR).toString());
 		      if(fips == this.FIPS){
 		    	  MultiPolygon multiPolygon = (MultiPolygon) feature.getDefaultGeometry();
 			      Point centroid = multiPolygon.getCentroid();
 			      Unit u = new Unit(String.valueOf(fips), centroid , 0, multiPolygon);
-			      d.add(u);
+			      d.add(u, false);
 			      districtList.add(d);
 		      }
 		    }

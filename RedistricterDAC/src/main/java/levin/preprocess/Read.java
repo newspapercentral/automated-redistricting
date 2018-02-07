@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -52,6 +51,7 @@ public class Read {
 	private static String DOC_ROOT;
 	protected static String DATA_PATH;
 	private static int MAX_NEIGHBORS;
+	private static HashMap<String, Unit> UNIT_MAP = new HashMap<String, Unit>();
 	
 	/**
 	 * Census attribute name for census block IDs
@@ -82,6 +82,7 @@ public class Read {
 	 * O(1)
 	 */
 	public Read(String doc_root , String dataFilePath, String shapeFile, String popFile, boolean isBlock, int max_neighbors){
+		Logger.setDebugFlag(false);
 		DOC_ROOT = doc_root;
 		DATA_PATH = doc_root + dataFilePath;
 		SHAPE_FILE = doc_root + dataFilePath + shapeFile;
@@ -92,8 +93,25 @@ public class Read {
 		UNITS = new ArrayList<Unit>();
 		IS_BLOCK = isBlock;
 		MAX_NEIGHBORS = max_neighbors;
+		
+		cleanUnits(readRawData());
+		
+		SummaryStatistics populationStat = new SummaryStatistics();
+		for(Unit u: UNIT_MAP.values()){
+			populationStat.addValue(u.getPopulation());
+		}
+		
+		Messenger.log("EDITED: " + EDITED_UNITS + " units");
+		Messenger.log("CLEANEDAverage Unit Population=" + populationStat .getMean());
+		Messenger.log("CLEANEDStdev Unit Population=" + populationStat.getStandardDeviation());
+		Messenger.log("CLEANEDMax Unit=" + populationStat.getMax());
+		Messenger.log("CLEANEDMin Unit=" + populationStat.getMin());
+
 	}
 	
+	public HashMap<String, Unit> getUnits(){
+		return UNIT_MAP;
+	}
 	/**
 	 * 
 	 * @param stateId (ex: "hi")
@@ -103,15 +121,12 @@ public class Read {
 	 * O(n^2) in worst case - practically O(n) see notes below
 	 */
 	public DistrictList getDistrictList(String stateId){
-		DistrictList stateWideDistrictList = new DistrictList(1, stateId, DOC_ROOT);
-		UNITS = cleanUnits(readRawData());
-		Logger.log("Finished reading now making state wide district");
-		
+		DistrictList stateWideDistrictList = new DistrictList(1, stateId, DOC_ROOT);		
 		for(Unit u: UNITS){
-			((StateWideDistrict)stateWideDistrictList.getDistrict(0)).add(u);
+			((StateWideDistrict)stateWideDistrictList.getDistrict(0)).add(u, true);
 		}
 		Logger.log("Returning state wide district");
-		Geometry stateGeometry = stateWideDistrictList.getDistrict(0).getGeometry();
+		Geometry stateGeometry = stateWideDistrictList.getDistrict(0).  getGeometry();
 		if(stateGeometry.getNumGeometries() > 1){
 			//Ex: Hawaii is not contiguous and requires modifications to the shape file
 			Logger.log("State is a multipolygon, hope you made changes\n" + stateWideDistrictList.getDistrict(0).getGeometry().toText());
@@ -187,6 +202,7 @@ public class Read {
 		      Unit u = new Unit(blockId, centroid, population, multiPolygon);
 		      populationStat.addValue(population);
 		      unitList.add(u);
+		      UNIT_MAP.put(u.getId(), u);
 		      
 		      if(blockId.length() >=5){
 		    	  String county = u.getId().substring(2, 5);
@@ -221,6 +237,10 @@ public class Read {
 		return POPULATION;
 	}
 	
+	public static int getEditedCount() {
+		return EDITED_UNITS;
+	}
+	
 	/**
 	 * Reads in population data from STATE-pop-data.txt
 	 * @return
@@ -228,8 +248,8 @@ public class Read {
 	//Code From: http://stackoverflow.com/questions/4716503/best-way-to-read-a-text-file
 	public static HashMap<String, Integer> getPopData(){
 		    try {
-		    	 System.out.println("Attempting to read file " + POP_FILE  );
-				 BufferedReader br = new BufferedReader(new FileReader(POP_FILE ));
+		    	 	Messenger.log("Attempting to read file " + POP_FILE  );
+				BufferedReader br = new BufferedReader(new FileReader(POP_FILE ));
 
 		        StringBuilder sb = new StringBuilder();
 		        String line = br.readLine();
@@ -283,184 +303,153 @@ public class Read {
 	 * @param units
 	 * @return new list of units
 	 */
-	private ArrayList<Unit> cleanUnits(ArrayList<Unit> units){
-		//STARTED HERE
-		int previousEditCount = -1;
-		Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
-		while(previousEditCount < EDITED_UNITS){
-			Logger.log("mergeMultiPolygonUnitsLoop: " + previousEditCount + "<" + EDITED_UNITS);
-			previousEditCount = EDITED_UNITS;
-			mergeMultiPolygonUnits(units);
-		}
-		
-		//ENDED HERE
-		//mergeNestedUnits(units);
-		//this is not necessary because there will be other units that are valid that will break
-		//compactness. We will need to do post processing and flip bad assignments
-		
-		SummaryStatistics populationStat = new SummaryStatistics();
+	private void cleanUnits(ArrayList<Unit> units){		
+		findNeighbors(units);		
 		for(Unit u: units){
-			populationStat.addValue(u.getPopulation());
-		}
-		
-		Messenger.log("CLEANEDAverage Unit Population=" + populationStat .getMean());
-		Messenger.log("CLEANEDStdev Unit Population=" + populationStat.getStandardDeviation());
-		Messenger.log("CLEANEDMax Unit=" + populationStat.getMax());
-		Messenger.log("CLEANEDMin Unit=" + populationStat.getMin());
-		
-		findNeighbors(units);
-		
-		return units;
-	}
-	/**
-	 * O(n^2) in worst case, practically O(n) because there are only a handful of these units
-	 * and only a few units for each one have to be merged
-	 * @param units
-	 * @return
-	 */
-	private ArrayList<Unit> mergeMultiPolygonUnits(ArrayList<Unit> units){
-		ArrayList<Unit> addUnits = new ArrayList<Unit>();
-		ArrayList<Unit> removeUnits = new ArrayList<Unit>();
-		//ISSUE: A & B ==> A,B
-		//B &C ==> B,C  SHOULD BE A,B,C
-		//keep track of index in units to return to after I fix one of them
-		//look at updated list
-		for(Unit u: units){
-			if(u.getGeometry().getNumGeometries() > 1){
-				EDITED_UNITS ++;
-				Logger.log("Editing: " + u.getId());
-				Logger.log("Edit Count: " + EDITED_UNITS);
-				removeUnits.add(u);
-				UnitGroup mergedUnits = new UnitGroup(u.getId(), u.getCentroid(), u.getPopulation(), u.getGeometry());
-				for(Unit combineUnits: findInBetweenUnits(u, units)){
-					mergedUnits.addUnit(combineUnits);
-					removeUnits.add(combineUnits);
-				}
-				addUnits.add(mergedUnits);
+			if(UNIT_MAP.get(u.getId())!= null && u.getGeometry().getNumGeometries() > 1){
+				mergeMultiPolygons(u);
 			}
-		}
-		return updateUnitList(units, removeUnits, addUnits);
+		}		
 	}
 	
-	private ArrayList<Unit> findInBetweenUnits(Unit multi, ArrayList<Unit> units){
-		ArrayList<Unit> mergeUnits = new ArrayList<Unit>();
-		ArrayList<Unit> neighbors = new ArrayList<Unit>();
-		//make this a KD tree - should run faster
-			//Look for single unit to fix it (99% of cases)
-				//Keep track of all neighbors and merge all of them if nothing fixes it
-				//Break and restart again
-		for(Unit u: units){
+	private void mergeMultiPolygons(Unit multi){
+		
+		boolean hasChanged = false;
+		//simple case, one unit fixes it (99% of cases)
+		for(String neigh: multi.getNeighbors()) {
+			String multiId = multi.getId();
 			
-			if(!u.getId().equals(multi.getId())
-					&& multi.getGeometry().union(u.getGeometry()).getNumGeometries() == 1){
-				mergeUnits.add(u);
+			if(multi.getGeometry().union(UNIT_MAP.get(neigh).getGeometry()).getNumGeometries() == 1) {
+				Messenger.log("Merging: " + multiId + " and " + neigh);
+				UnitGroup combinedUnit = new UnitGroup(multiId, multi.getCentroid(), multi.getPopulation(), multi.getGeometry(), multi.getNeighbors());
+				combinedUnit.addUnit(UNIT_MAP.get(neigh));
+				UNIT_MAP.remove(neigh);
+				UNIT_MAP.remove(multiId);
+				UNIT_MAP.put(combinedUnit.getId(), combinedUnit);
+				Logger.log("Fixing Multi-neighbors for "+ multiId);
+				updateNeighbors(multiId, neigh, combinedUnit, new ArrayList<String>());
+				EDITED_UNITS+=2;
+				hasChanged = true;
 				break;
-			}else if(!u.getId().equals(multi.getId())
-					&& multi.getGeometry().touches(u.getGeometry())){
-				neighbors.add(u);
 			}
 		}
-		return mergeUnits.size() >0 ? mergeUnits : neighbors;
+		//complex case: add all neighbors and try again
+		if(!hasChanged) {
+			Messenger.log("Merging all neighbors for unit: " + multi.getId());
+			UnitGroup combinedUnit = new UnitGroup(multi.getId(), multi.getCentroid(), multi.getPopulation(), multi.getGeometry(), multi.getNeighbors());
+			UNIT_MAP.remove(multi.getId());
+			ArrayList<Unit> neighbors = new ArrayList<Unit>();
+			ArrayList<String> ids = multi.getNeighbors();
+			EDITED_UNITS++;
+			
+			for(String neigh: ids) {
+				neighbors.add(UNIT_MAP.get(neigh));
+				UNIT_MAP.remove(neigh);
+				EDITED_UNITS++;
+			}
+			combinedUnit.addUnitList(neighbors);
+			UNIT_MAP.put(combinedUnit.getId(), combinedUnit);
+			updateNeighborsList(multi.getId(), ids , combinedUnit);
+			//recursively call merge until it's fixed
+			if(combinedUnit.getGeometry().getNumGeometries() > 1) {
+				mergeMultiPolygons(multi);
+			}
+		}
+
 	}
 	
-	private ArrayList<Unit> updateUnitList(ArrayList<Unit> units, ArrayList<Unit> removeUnits, ArrayList<Unit> addUnits){
-		for(Unit u: removeUnits){
-			units.remove(u);
+	private void updateNeighborsList(String comb1, ArrayList<String> comb2s, UnitGroup combined) {
+		for(String comb2: comb2s) {
+			updateNeighbors(comb1, comb2, combined, comb2s);
 		}
-		units.addAll(addUnits);
-		return units;
+	}
+	
+	private void updateNeighbors(String comb1, String comb2, UnitGroup combined, ArrayList<String> comb2s) {
+		ArrayList<String> neighbors = new ArrayList<String>();
+		neighbors.addAll(combined.getNeighbors());
+		for(String neigh: neighbors ) {
+			if(neigh.equals(comb1) || neigh.equals(comb2) || comb2s.contains(neigh)) {
+				combined.removeNeighbor(neigh);
+			}else {
+				Messenger.log("for " + neigh + " replacing: " + comb1 + " and " + comb2 + 
+						" with " + combined.getId());
+				Unit neighbor = UNIT_MAP.get(neigh);
+				neighbor.replaceNeighbor(comb1, combined);
+				neighbor.replaceNeighbor(comb2, combined);
+			}
+		}
 	}
 	
 	public ArrayList<Unit> getRawUnits(){
 		return UNITS;
 	}
 	/** 
-	 * O(n^2) look at every pair of units to see if they are neighbors
+	 * O(mn) look at every pair of units to see if they are neighbors
 	 * @param units
 	 */
 	private void findNeighbors(ArrayList<Unit>units) {
-		System.out.println("Starting neighbor calculation - FYI O(n^2): 2.0");
-		int counter = 0;
-		int coordinates= 0;
-		System.out.println("Making tree");
-		KdTree <Unit> kd = makeTree(units);//O(n) to make tree
-		for(Unit u1: units) {
-			System.out.println("u1: " + u1.getId());
-			counter ++;
-			if(counter == 1) {
-				System.out.println("#1 through");
+		Messenger.log("makeMap(units);//O(n)");
+		HashMap <Coordinate, String> map = makeMap(units);//O(n) to make map where n is # coordinates
+		Messenger.log("parseMap(map);//O(n)");
+		HashMap <String, Integer> countMap = parseMap(map);
+		Messenger.log("Count pairs - O(m)");
+		for(String pairs: countMap.keySet()) {
+			//A->B and B->A is one point, so >2
+			if(countMap.get(pairs)>2) {
+				String[] data = pairs.split(":");
+				String minUnit = data[0];
+				String maxUnit = data[1];
+				UNIT_MAP.get(minUnit).addNeighbor(maxUnit);
+				UNIT_MAP.get(maxUnit).addNeighbor(minUnit);
 			}
-			if(counter == 10) {
-				System.out.println("#10 through");
+			
+			
+		}
+	}
+	
+	
+	private static HashMap<Coordinate, String> makeMap(ArrayList<Unit> units) {
+		HashMap<Coordinate, String> map = new HashMap<Coordinate, String>();
+		for(Unit u : units) {
+			for (Coordinate c: u.getGeometry().getCoordinates()){
+				String mapVal = map.get(c);
+				if(mapVal != null && mapVal.contains(u.getId())) {
+					//do nothing
+				}else if(map.containsKey(c)) {
+					String newValue = map.get(c) + "," + u.getId();
+					map.remove(c);
+					map.put(c, newValue);
+				}else {
+					map.put(c, u.getId());
+				}
 			}
-			if(counter == 100) {
-				System.out.println("#100 through");
-			}
-			if(counter == 1000) {
-				System.out.println("#1,000 through");
-			}
-			if(counter == 10000) {
-				System.out.println("#10,000 through");
-			}
-			if(counter == units.size()/4) {
-				System.out.println("25% through");
-			}
-			if(counter == units.size()/2) {
-				System.out.println("50% through");
-			}
-			if(counter == units.size()*3/4) {
-				System.out.println("75% through");
-			}
-			ArrayList<Coordinate> c1 = new ArrayList<Coordinate> ();
-			c1.addAll(Arrays.asList(u1.getGeometry().getCoordinates()));
-			coordinates += c1.size();
-			for(Unit u2: getXNeighbors(kd, u1, MAX_NEIGHBORS)) {
-				System.out.println("u2: " + u2.getId());
-				if(u1.getId() != u2.getId()) {
-					ArrayList<Coordinate> c2 = new ArrayList<Coordinate> ();
-					c2.addAll(Arrays.asList(u2.getGeometry().getCoordinates()));
-					c2.retainAll(c1);
-					//remove duplicates
-					Set<Coordinate> s = new HashSet<Coordinate>();
-					s.addAll(c2);
-					//units must have more than 1 coordinate in common to be neighbors
-					if(s.size() > 1) {
-					//Geometry g2 = u2.getGeometry();
-					//String inter = g1.intersection(g2).toText();
-					
-					//if(!inter.contains("EMPTY") && !inter.contains("POINT")) {
-						u1.addNeighbor(u2.getId());
+		}
+		return map;
+	}
+
+	private static HashMap<String, Integer> parseMap(HashMap<Coordinate, String> map) {
+		HashMap<String, Integer> unitCountMap = new HashMap<String, Integer>();
+		for(String units: map.values()) {
+			String[] ids = units.split(",");
+			if(ids.length >1) {
+				for(String u1: ids) {
+					for(String u2: ids) {
+						if(!u1.equals(u2)) {
+							String min = (u1.compareTo(u2) >= 0) ? u1 : u2;
+							String max = (u1.compareTo(u2) >= 0) ? u2 : u1;
+							String key = min + ":" + max;
+							if(unitCountMap.containsKey(key)) {
+								int count = unitCountMap.get(key) +1;
+								unitCountMap.remove(key);
+								unitCountMap.put(key, count);
+							}else {
+								unitCountMap.put(key, 1);
+							}
+						}
 					}
 				}
 			}
 		}
-		System.out.println("Total Coordinates:" + coordinates);
+		return unitCountMap;
 	}
-	
-	private static ArrayList<Unit> getXNeighbors(KdTree<Unit> kd, Unit u, int numNeighbors){
-		ArrayList<Unit> result = new ArrayList<Unit>();
-		DistanceFunction d = new SquareEuclideanDistanceFunction();
-		Point centroid = u.getCentroid();
-		double[] cent = {centroid.getY(), centroid.getX()};
-		System.out.println("\t Making NeartestNeighborIterator");
-		NearestNeighborIterator<Unit> iterator = kd.getNearestNeighborIterator(cent, numNeighbors, d);
-		
-		System.out.println("\t Starting while loop");
-		while(iterator.hasNext()) {
-			Unit nextUnit = iterator.next();
-			result.add(nextUnit);
-		}
-		return result;
-	}
-	
-	private static KdTree<Unit> makeTree(ArrayList<Unit> units) {
-		KdTree<Unit> kd = new KdTree<Unit>(2);//x, y dimensions
-		for(Unit u : units) {
-			Point centroid = u.getCentroid();
-			double[] cen = {centroid.getY(), centroid.getX()};
-			kd.addPoint(cen, u);
-		}
-		return kd;
-	}
-
 }
