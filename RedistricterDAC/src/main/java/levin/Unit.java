@@ -12,16 +12,23 @@ public class Unit{
 	protected int population;
 	protected Point centroid;
 	protected Geometry geom;
+<<<<<<< master
 	protected int districtAssignment;
 	protected ArrayList<String> neighbors;
+=======
+	
+>>>>>>> 36d778b Final code for DAC
 
 	public Unit(String _id, Point cen, int pop, Geometry geometry){
 		id = _id;
 		centroid = cen;
 		population = pop;
 		geom = geometry;
+<<<<<<< master
 		districtAssignment=-1;
 		neighbors = new ArrayList<String>();
+=======
+>>>>>>> 36d778b Final code for DAC
 	}
 	
 	public String getId() {
@@ -61,6 +68,7 @@ public class Unit{
 	public int getNumUnits(){
 		return this.id.split(",").length;
 	}
+<<<<<<< master
 	
 	public void setDistrictAssignment(int districtNum){
 		this.districtAssignment = districtNum;
@@ -95,6 +103,8 @@ public class Unit{
 		}
 		return result;
 	}
+=======
+>>>>>>> 36d778b Final code for DAC
 
 	@Override
 	public String toString(){

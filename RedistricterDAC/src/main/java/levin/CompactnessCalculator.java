@@ -91,7 +91,7 @@ public class CompactnessCalculator {
 		    	  MultiPolygon multiPolygon = (MultiPolygon) feature.getDefaultGeometry();
 			      Point centroid = multiPolygon.getCentroid();
 			      Unit u = new Unit(String.valueOf(fips), centroid , 0, multiPolygon);
-			      d.add(u, false);
+			      d.add(u);
 			      districtList.add(d);
 		      }
 		    }

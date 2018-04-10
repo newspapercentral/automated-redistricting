@@ -18,23 +18,21 @@ public class MultiPolygonFlatener {
 	public MultiPolygonFlatener(DistrictList districts){
 		this.districts = districts;
 		this.hasChanged = false;
-		
-		Logger.log("district len=" + districts.getDistrictList().length);
-		boolean district0hasMulti = districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON");
-		boolean district1hasMulti = districts.getDistrict(1).getGeometry().toText().contains("MULTIPOLYGON");
-		Logger.log("0 has multi: " + district0hasMulti + " , 1 has multi: " + district1hasMulti);
-		Logger.log("0 pop: " + districts.getDistrict(0).getDistrictPopulation() + " , 1 pop: " + districts.getDistrict(1).getDistrictPopulation() );
-		Logger.log(districts.getDistrict(0).getGeometry().toText());
-		Logger.log(districts.getDistrict(1).getGeometry().toText());
+		if(levin.Main.DEBUG){
+			System.out.println("district len=" + districts.getDistrictList().length);
+			boolean district0hasMulti = districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON");
+			boolean district1hasMulti = districts.getDistrict(1).getGeometry().toText().contains("MULTIPOLYGON");
+			System.out.println("0 has multi: " + district0hasMulti + " , 1 has multi: " + district1hasMulti);
+		}
 		if(districts.getDistrictList().length ==2){
 			if(districts.getDistrict(0).getGeometry().toText().contains("MULTIPOLYGON")) {
 				hasChanged = true;
-				flatten(districts.getDistrict(0));
+				flatten(districts.getDistrict(0), districts.getDistrict(1));
 			}
 			
 			if(	districts.getDistrict(1).getGeometry().toText().contains("MULTIPOLYGON")){
 				hasChanged = true;
-				flatten(districts.getDistrict(1));
+				flatten(districts.getDistrict(1), districts.getDistrict(0));
 			}
 		}
 	}
@@ -66,7 +64,7 @@ public class MultiPolygonFlatener {
 		return maxCoordIndex;
 	}
 	
-	private void flatten(District d){
+	private void flatten(District d, District other){
 		ArrayList<Unit> swapUnits = new ArrayList<Unit>();
 		for(Geometry geom : findBadPieces(d.getGeometry())){
 			ArrayList<Unit> members = d.getMembers();

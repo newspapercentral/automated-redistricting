@@ -1,7 +1,6 @@
 package levin;
 
 import levin.printout.ErrorLog;
-import levin.printout.Logger;
 
 import java.util.ArrayList;
 
@@ -22,7 +21,7 @@ public class UnitGroup extends Unit{
 	
 	public void addUnit(Unit u){
 		if(u.getId().length() < 5){
-			Logger.log("trying to add bad unit " + u.getId() + "to UnitGroup");
+			ErrorLog.log("trying to add bad unit " + u.getId() + "to UnitGroup");
 		}
 		super.neighbors = combineNeighbors(u.getNeighbors(), u.getId());
 		super.id += "," + u.getId();

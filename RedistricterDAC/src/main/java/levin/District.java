@@ -78,17 +78,6 @@ public class District {
 		}
 		return result;
 	}
-
-	public boolean containsId(String id){
-		boolean result = false;
-		for(Unit u: this.members){
-			if(u.id.equals(id)){
-				result = true;
-				break;
-			}
-		}
-		return result;
-	}
 	
 	public int getDistrictPopulation(){
 		return population;
@@ -136,6 +125,7 @@ public class District {
 			double result = (circlePerim/this.getGeometry().getLength());
 			return result;
 	}
+<<<<<<< master
 	
 	public int getNumCounties(){
 		ArrayList<String> uniqueCounties = new ArrayList<String>();
@@ -151,4 +141,6 @@ public class District {
 	public int getId() {
 		return this.id;
 	}
+=======
+>>>>>>> 36d778b Final code for DAC
 }
