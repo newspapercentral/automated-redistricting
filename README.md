@@ -10,7 +10,7 @@
 2. Download Census Blocks and or Census Tracts into the /data folder
       - [Census Tracts](https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2010&layergroup=Census+Tracts)
       - [Census Blocks](https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2010&layergroup=Blocks)
-      - [State Geography] (https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2010&layergroup=States+%28and+equivalent%29)
+      - [State Geography](https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2010&layergroup=States+%28and+equivalent%29)
       - **Do not rename the files; use the default names from the U.S. Census**
 3. Download dac.jar into the /jars folder
       - you can modify the code in this repository and create a new jar if you would like
